@@ -5,7 +5,13 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "echo \"[shared] build script placeholder — configurar via tsc -p tsconfig.json\"",
-    "dev": "echo \"[shared] dev script placeholder — configurar via tsc --watch\""
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
   }
 }
