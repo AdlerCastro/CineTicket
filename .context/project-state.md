@@ -2,7 +2,7 @@
 
 > Atualizado ao fim de cada sprint (ou tarefa relevante) pelo agente que a executou. Fonte que qualquer agente lê antes de começar algo novo — se este arquivo estiver desatualizado, a tarefa seguinte corre o risco de trabalhar sobre premissa errada.
 
-**Última atualização:** 19/08 — Sprint 1 (Fundação), parte Backend concluída pelo Backend Agent.
+**Última atualização:** 19/08 — Backend: porta fixa (3333) + Swagger + README.
 
 ## Fase atual
 
@@ -32,6 +32,12 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - `packages/shared/src/schemas/`: `userSchema`, `createSessionSchema`, `createReservationSchema` (Zod), exportados via `src/index.ts`. `zod` adicionado como dependência do pacote (`packages/shared/package.json`, que já existia com scaffold vazio).
 - `pnpm --filter backend lint|test|test:e2e|build` rodam sem erro (test/test:e2e ainda sem specs — `passWithNoTests: true`, esperado até o Sprint 2 trazer os testes adversariais de QA).
 
+**Backend — porta fixa + README (tarefa avulsa pós-Sprint 1):**
+
+- API sobe em `http://localhost:3333` (3000 reservada para o frontend); `PORT` default em `env.schema.ts` e `CORS_ORIGINS` default agora `http://localhost:3000`. `.env`/`.env.example` atualizados. Confirmado no log do Nest (`[Bootstrap] CineTicket API rodando em http://[::1]:3333`) e via `curl` em `pnpm dev` real.
+- Swagger configurado em `src/main.ts` (`@nestjs/swagger`, novo), disponível em `http://localhost:3333/docs` — validado com `curl` (HTTP 200).
+- `backend/README.md` criado: stack, como rodar isolado, porta/Swagger, tabela de scripts, credenciais reais dos 4 usuários semeados (`senha123`), referência ao `CLAUDE.md` para estrutura de módulos.
+
 ### Decisões e riscos que surgiram durante a implementação (Backend, Sprint 1)
 
 1. **Constraint UNIQUE de `(sessionId, seatId)` implementada como índice único PARCIAL, não como `@@unique` simples no Prisma DSL.** Um `@@unique([sessionId, seatId])` comum bloquearia permanentemente a reabertura do assento após `EXPIRED`/`CANCELLED` (quebra o teste obrigatório de expiração, project-rules.md §6.3). Um `@@unique([sessionId, seatId, status])` também é incorreto: duas reservas diferentes que ambas terminam `EXPIRED` para o mesmo assento colidiriam no valor repetido do status. Prisma não suporta índice único com cláusula `WHERE` na DSL do `schema.prisma`, então a constraint real (`WHERE status IN ('PENDING','PAID')`) foi adicionada via SQL bruto na migration `20260819033158_init` (edição manual do `migration.sql`), documentada com comentário extenso no `schema.prisma` acima do model `Reservation`. Validado manualmente via `\d "Reservation"` no psql — índice `reservation_active_seat_unique` presente e com a cláusula `WHERE` correta. **Recomendo ao QA Agent testar explicitamente**: (a) duas reservas concorrentes para o mesmo assento (deve falhar exatamente uma), (b) reservar → deixar expirar → reservar de novo com outro cliente → deixar expirar de novo (não deve colidir).
@@ -39,6 +45,9 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 3. **Aviso de depreciação do Prisma:** `package.json#prisma` (usado para apontar `schema.prisma` para `src/prisma/`) está deprecado a partir do Prisma 7 em favor de `prisma.config.ts`. Não migrado agora (fora de escopo do Sprint 1); considerar na próxima atualização de versão do Prisma.
 4. **`.prettierrc` da raiz (project-rules.md §3) ainda não existe** — fora do escopo desta tarefa (compartilhado entre backend/frontend). Código formatado manualmente seguindo a convenção documentada (aspas simples, ponto e vírgula, 2 espaços) até existir.
 5. **`test/unit/` e `test/e2e/` ainda vazios** (só `.gitkeep`) — nenhum teste é esperado neste sprint; QA Agent inicia os testes adversariais (concorrência, ingresso duplicado, expiração) no Sprint 2, conforme `agent-ecosystem.md`.
+6. **`D29` não encontrado em `decisions-log.md`** — a tarefa de ajuste de porta (3333) pediu para procurar essa decisão como referência, mas o log só vai até `D26`. Prosseguiu-se mesmo assim porque a própria tarefa já trazia a justificativa inline (3000 reservada para o frontend) e o trabalho é de baixo risco/reversível — mas o processo formal (`project-rules.md`: toda decisão nova deve ser registrada *antes* de virar instrução) não foi seguido desta vez. Sinalizado ao usuário; `D27`–`D29` continuam pendentes de registro por quem tiver escopo sobre `decisions-log.md`.
+7. **TypeScript e Prisma mantidos abaixo do major mais recente, de propósito.** Usuário perguntou por que não estamos em TS 7 / Prisma 7 (os mais recentes publicados no momento: TS `7.0.2`, Prisma `7.9.1`). Confirmado e verificado (não é suposição): `typescript-eslint` declara `peerDependencies.typescript: '>=4.8.4 <6.1.0'` e `ts-jest` declara `typescript: '>=4.3 <7'` — ou seja, subir para TS 7 quebraria `lint`/`test` agora. Prisma 7 remove o suporte a `package.json#prisma` (só `prisma.config.ts`), exigindo migração de config logo depois de validarmos a migration + índice único parcial contra o banco real. Decisão do usuário: manter TS `^5.7.2`/Prisma `^6.0.0` por ora; upgrade fica para tarefa deliberada e isolada, não para o meio de um sprint de prazo apertado.
+8. **`tsconfig.json` teve `"incremental": true` removido.** Um editor conectado à sessão (extensão "Console Ninja") modificou `tsconfig.json` nos bastidores e injetou `"ignoreDeprecations": "6.0"` (valor inválido para o TypeScript 5.9.3 instalado, quebrava a compilação com `TS5103`) — removido. Ao corrigir isso, ficou evidente um segundo problema, pré-existente desde o Sprint 1: `"incremental": true` no `tsconfig.json` combinado com `"deleteOutDir": true` no `nest-cli.json` fazia o cache incremental do TS (`tsconfig.build.tsbuildinfo`) achar que `dist/` ainda tinha os arquivos depois de o Nest CLI apagar a pasta, pulando a reemissão — `nest build` retornava sucesso (exit 0) sem gerar nenhum arquivo, e `pnpm dev` falhava com `Cannot find module '.../dist/main'`. Removido `incremental` do `tsconfig.json`; `pnpm dev`/`pnpm build` voltaram a funcionar de forma confiável. Vale conferir se esse padrão (`incremental` + `deleteOutDir`) não é reintroduzido no futuro.
 
 ## Pendente (ordem de sprint, ver `agent-ecosystem.md`)
 
@@ -60,4 +69,5 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 
 ## Decisões pendentes de revisão futura
 
-Nenhuma no momento. Todas as decisões da entrevista estão fechadas — ver `decisions-log.md`.
+1. Backfill de `D27`–`D29` em `decisions-log.md` (ver item 6 da seção "Decisões e riscos" do Backend acima) — quem tiver escopo sobre o arquivo precisa registrar as decisões tomadas fora do ciclo formal.
+2. Upgrade para TypeScript 7 / Prisma 7 — adiado deliberadamente (ver item 7 da mesma seção). Revisitar perto do fim do projeto ou se algum bug específico exigir.
