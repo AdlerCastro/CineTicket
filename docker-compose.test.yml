@@ -1,0 +1,17 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: cineticket-postgres-test
+    environment:
+      POSTGRES_USER: cineticket
+      POSTGRES_PASSWORD: cineticket
+      POSTGRES_DB: cineticket_test
+    ports:
+      - '5435:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cineticket -d cineticket_test']
+      interval: 5s
+      timeout: 5s
+      retries: 5
