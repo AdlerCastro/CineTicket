@@ -79,7 +79,7 @@
 - Deploy Railway (backend + Postgres) e Vercel (frontend) — a partir de `main`
 - Variáveis de ambiente por ambiente, com `.env.example` versionado
 
-**Por que existe separado:** é a fatia isolada de maior peso no bônus (deploy dos três componentes), tem stack própria (YAML, Dockerfile — não TypeScript de aplicação), e historicamente é a parte que fica pra depois e quebra em cima da hora se não tiver dono desde o início do projeto, não só no fim.
+**Por que existe separado:** deploy dos três componentes é uma fatia isolada e significativa da avaliação, tem stack própria (YAML, Dockerfile — não TypeScript de aplicação), e historicamente é a parte que fica pra depois e quebra em cima da hora se não tiver dono desde o início do projeto, não só no fim.
 
 ## Papéis considerados e descartados
 
