@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cineticket-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cineticket
+      POSTGRES_PASSWORD: cineticket
+      POSTGRES_DB: cineticket_dev
+    ports:
+      - "5434:5432"
+    volumes:
+      - cineticket_pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cineticket -d cineticket_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cineticket_pgdata_dev:
