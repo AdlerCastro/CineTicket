@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  backend:
+    name: Backend (lint, test, build)
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://cineticket:cineticket@localhost:5435/cineticket_test
+      JWT_ACCESS_SECRET: ci-test-secret-min-16-chars
+      JWT_REFRESH_SECRET: ci-test-secret-min-16-chars
+      JWT_TICKET_SECRET: ci-test-secret-min-16-chars
+      TMDB_API_KEY: ci-test-tmdb-key
+      CORS_ORIGINS: http://localhost:3000
+      NODE_ENV: test
+      PORT: 3333
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter backend lint
+
+      - name: Start test database
+        run: docker compose -f docker-compose.test.yml up -d --wait
+
+      - name: Run migrations
+        run: pnpm --filter backend exec prisma migrate deploy
+
+      - name: Unit tests
+        run: pnpm --filter backend test
+
+      - name: E2E tests
+        run: pnpm --filter backend test:e2e
+
+      - name: Stop test database
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
+      - name: Build
+        run: pnpm --filter backend build
+
+  frontend:
+    name: Frontend (lint, build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter frontend lint
+
+      - name: Build
+        run: pnpm --filter frontend build
