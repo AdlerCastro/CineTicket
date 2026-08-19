@@ -2,11 +2,11 @@
 
 > Atualizado ao fim de cada sprint (ou tarefa relevante) pelo agente que a executou. Fonte que qualquer agente lê antes de começar algo novo — se este arquivo estiver desatualizado, a tarefa seguinte corre o risco de trabalhar sobre premissa errada.
 
-**Última atualização:** 19/08 — Integração ESLint + Prettier (raiz, backend, frontend).
+**Última atualização:** 19/08 — DevOps: `docker-compose.test.yml` + CI (`.github/workflows/ci.yml`).
 
 ## Fase atual
 
-Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`). Sprint 1: fundação do workspace pnpm completa, Postgres de dev containerizado, parte de backend concluída (schema Prisma, migration, seed, config, módulos, schemas Zod), e agora a parte de frontend também concluída (Next.js, tema customizado, dark mode, TanStack Query, esqueleto das 4 rotas de grupo). Falta só o CI (`.github/workflows`, DevOps Agent) e `docker-compose.test.yml` para fechar o Sprint 1 por completo.
+Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`). Sprint 1 **completo**: fundação do workspace pnpm, Postgres de dev containerizado, backend (schema Prisma, migration, seed, config, módulos, schemas Zod), frontend (Next.js, tema customizado, dark mode, TanStack Query, esqueleto das 4 rotas de grupo), e agora DevOps (`docker-compose.test.yml` + CI no GitHub Actions). Falta só `backend/Dockerfile` e `frontend/Dockerfile` (fora do escopo desta tarefa, cada um na sessão do respectivo repositório) antes do deploy do Sprint 5.
 
 ## Funcional
 
@@ -58,6 +58,18 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - Baseline de ambos os repos tinha violações de formatação pré-existentes, pegas pela integração nova: `backend/src/prisma/prisma.service.ts` (import multi-linha) e 8 arquivos do frontend (principalmente `components/ui/button.tsx` e `input.tsx`, gerados pelo CLI do Shadcn com aspas duplas/sem ponto e vírgula, conflitando com o `.prettierrc`). Corrigidos via `eslint --fix` em commit separado (`:ok_hand: style:`), sem mudança de lógica.
 - Validado: `pnpm --filter backend lint` e `pnpm --filter frontend lint` passam limpos; teste negativo confirmado nos dois repos (trocar aspas simples por duplas num import real é pego como `prettier/prettier` error; revertido depois do teste).
 
+**DevOps — Sprint 1 concluído (`docker-compose.test.yml` + CI):**
+
+- `docker-compose.test.yml` na raiz: serviço `postgres-test` (`postgres:16-alpine`, `cineticket-postgres-test`), porta host `5435` (isolada da porta `5434` do Postgres de dev), banco `cineticket_test`, **sem volume nomeado** — persistência desabilitada via `tmpfs: [/var/lib/postgresql/data]`, garantindo que nenhum dado sobrevive a um `down`/restart do container. Mesmas credenciais simples de dev (`cineticket`/`cineticket`), sem risco por estar isolado de rede/porta/propósito.
+- `.github/workflows/ci.yml`: dispara em `pull_request` para `develop` e `main` (`project-rules.md` §9). Dois jobs paralelos:
+  - **`backend`**: setup `pnpm` (`pnpm/action-setup`) → setup Node 20 com cache de pnpm store (`actions/setup-node`, `cache: pnpm`) → `pnpm install --frozen-lockfile` → `pnpm --filter backend lint` → sobe `docker-compose.test.yml` (`docker compose ... up -d --wait`, espera o healthcheck) → `prisma migrate deploy` contra o banco de teste → `pnpm --filter backend test` → `pnpm --filter backend test:e2e` → derruba o compose de teste (`down -v`, roda mesmo se os testes falharem, `if: always()`) → `pnpm --filter backend build`.
+  - **`frontend`**: mesmo setup de pnpm/Node → `pnpm install --frozen-lockfile` → `pnpm --filter frontend lint` → `pnpm --filter frontend build`.
+  - Falha em qualquer step bloqueia o job (comportamento padrão do GitHub Actions — sem `continue-on-error`).
+- **Validação estática**: `actionlint` (baixado do release oficial, v1.7.7, só para esta validação, removido depois) rodou contra `.github/workflows/ci.yml` — **0 erros/avisos**. `docker compose -f docker-compose.test.yml config` resolveu o arquivo com sucesso. `python3 -c "yaml.safe_load(...)"` confirmou os dois arquivos como YAML válido.
+- **Validação real, ponta a ponta, reproduzindo os steps do job `backend` localmente** (Docker Desktop foi iniciado manualmente pelo usuário durante a sessão): `docker compose -f docker-compose.test.yml up -d --wait` → container `cineticket-postgres-test` `healthy` em ~5s; `prisma migrate deploy` (com `DATABASE_URL` apontando para `localhost:5435/cineticket_test`) aplicou a migration `20260819033158_init` com sucesso; `pnpm --filter backend test` e `test:e2e` passaram (`No tests found, exiting with code 0` — esperado, QA ainda não escreveu testes); `pnpm --filter backend build` (`nest build`) sem erro. Job `frontend` também reproduzido: `lint` limpo, `build` gerou as 4 rotas estáticas com sucesso. `docker compose -f docker-compose.test.yml down -v` confirmado limpo — **nenhum volume nomeado sobrou** (`docker volume ls` só mostra o volume do Postgres de dev, `cineticket_pgdata_dev`, intocado). Não testado apenas o disparo real via `act` (não instalado, fora do escopo mínimo) — mas todos os comandos que o workflow executa foram rodados manualmente com o resultado esperado.
+- `backend/Dockerfile` e `frontend/Dockerfile` **não foram criados** — fora do escopo desta tarefa por instrução explícita, ficam para tarefas separadas nas sessões de Backend Agent e Frontend Agent.
+- Nada em `backend/`, `frontend/` ou `docker-compose.yml` (dev) foi tocado — confirmado via `git diff --stat` antes de finalizar.
+
 ### Decisões e riscos que surgiram durante a implementação (Frontend, Sprint 1)
 
 1. **Conflito real entre `frontend/CLAUDE.md` (pré-D18, descrevia `components/{ui,features}`) e `project-rules.md`/D18 (Atomic Design de 5 níveis, Shadcn dentro de `atoms/`) foi escalado ao usuário antes de tocar em qualquer código**, conforme a própria regra do CLAUDE.md ("se o prompt conflitar com este arquivo, reporte em vez de decidir sozinho"). Resolvido pelo usuário durante a sessão: `ui/` mantido (destino nativo do CLI do Shadcn) cumprindo o papel de "atoms", sem pasta `atoms/` separada — hierarquia final de 4 níveis `ui → molecules → organisms → templates`. Registrado como **D31** em `decisions-log.md`; `project-rules.md` e `frontend/CLAUDE.md` já corrigidos para refletir isso.
@@ -84,7 +96,7 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - [x] Sprint 1 (infra) — Postgres de dev containerizado (`docker-compose.yml`) e `backend/.env.example` com `DATABASE_URL` de referência.
 - [x] Sprint 1 — Backend: schema Prisma completo, migration inicial, seed idempotente, config Zod, 9 módulos vazios, `packages/shared` com `userSchema`/`createSessionSchema`/`createReservationSchema`.
 - [x] Sprint 1 — Frontend: Next.js + TypeScript, Tailwind/Shadcn com tema customizado, dark mode via classe + toggle, TanStack Query, RHF+Zod (import de `@cineticket/shared` validado), `api-client.ts`, `.env.example`, esqueleto das 4 rotas de grupo.
-- [ ] Sprint 1 — `docker-compose.test.yml`, esqueleto CI (DevOps).
+- [x] Sprint 1 — `docker-compose.test.yml` (Postgres de teste isolado, sem persistência) e CI no GitHub Actions (`.github/workflows/ci.yml`, lint+test+build em PR para `develop`/`main`) — Sprint 1 fechado por completo.
 - [ ] Sprint 2 — Core Backend: auth+guards, integração TMDb, sessões, assentos com constraint de concorrência (schema/índice já prontos — falta a lógica de aplicação dentro de `prisma.$transaction`). QA inicia teste de concorrência em paralelo.
 - [ ] Sprint 3 — Core Frontend + Realtime: consumo de sessões/assentos, WebSocket Gateway, mapa em tempo real. **Marco dia 5: decisão WebSocket vs. polling.**
 - [ ] Sprint 4 — Fluxo completo: pagamento simulado, ingresso (JWT+QR), portaria com todos os retornos.
@@ -95,6 +107,7 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 1. **WebSocket** — maior risco técnico assumido conscientemente. Sem fallback implementado ainda; se Sprint 3 não estabilizar até dia 5, decisão de queda para polling precisa ser tomada explicitamente pelo Arquiteto, registrada em `decisions-log.md`.
 2. **Concorrência de assento** — regra central do projeto. Constraint UNIQUE parcial em `(sessionId, seatId)` já implementada no banco (ver decisão #1 da seção Backend/Sprint 1 acima) e validada manualmente via `\d`. Falta ainda: (a) a lógica de aplicação da criação de reserva dentro de `prisma.$transaction` (Sprint 2), e (b) o teste adversarial automatizado de concorrência real do QA Agent — até lá, a constraint de banco não foi provada sob carga concorrente de verdade, só inspecionada estaticamente.
 3. **Deploy Railway com WebSocket** — não validado ainda que o plano gratuito do Railway sustenta conexão persistente sem interrupção; verificar cedo (Sprint 1 ou início do Sprint 3), não deixar para o Sprint 5.
+4. **CI (`ci.yml`) validado estaticamente (`actionlint`, 0 erros) e com todos os comandos do job `backend`/`frontend` reproduzidos manualmente com sucesso** (subida do `docker-compose.test.yml`, `prisma migrate deploy`, testes, build) — mas o workflow em si nunca rodou dentro do GitHub Actions de verdade (`act` não disponível no ambiente). Risco residual baixo (nenhum passo é exótico), mas vale confirmar no primeiro PR real aberto contra `develop`/`main`.
 
 ## Decisões pendentes de revisão futura
 
