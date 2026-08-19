@@ -81,3 +81,15 @@ Uma sessão em `backend/`, outra em `frontend/`, nunca uma sessão só alternand
 
 **D26 — Setup de `pnpm-workspace.yaml` + `package.json` de raiz feito em sessão de raiz, não pelo Backend Agent**
 Ao iniciar Sprint 1, Backend Agent identificou corretamente que `pnpm --filter backend build` (critério de pronto da própria tarefa) depende de workspace root inexistente, e escalou o conflito em vez de criar o arquivo sozinho (comportamento correto conforme CLAUDE.md). Resolução: workspace root é fundação sem dono único (mesma categoria de `packages/shared`/`docker-compose.yml` já coberta por D25) — criado manualmente pelo usuário em sessão de raiz, antes de o Backend Agent retomar a tarefa original sem alteração de escopo.
+
+**D27 — Esqueleto de `package.json`/`tsconfig.json` de todos os workspaces (backend, frontend, packages/shared) consolidado numa única tarefa de raiz**
+Segunda escalada do Backend Agent (mesmo padrão de D26, agora para `packages/shared/package.json`) revelou que resolver bloqueio de infraestrutura um de cada vez é reativo — o Frontend Agent bateria no mesmo problema ao iniciar. Esqueleto puro (sem conteúdo de domínio) de todos os `package.json` é criado de uma vez em sessão de raiz; conteúdo real (schemas, módulos, rotas) permanece com o agente dono de cada repo.
+
+**D28 — Postgres de dev roda em container Docker (porta 5434), não no Postgres local da máquina (porta 5433)**
+Backend Agent, ao precisar rodar migration+seed, encontrou um cluster Postgres já rodando localmente e perguntou por credenciais dele. Rejeitado: usar banco do host contradiz a decisão já travada de Docker Compose dev/test separados. Primeira tarefa do DevOps Agent (`docker-compose.yml` dev) puxada para frente, criada em sessão de raiz, para destravar o Backend Agent sem violar a stack decidida. `docker-compose.test.yml` permanece como tarefa futura, não bloqueia Sprint 1.
+
+**D29 — Portas fixas: backend em 3333, frontend em 3000**
+Frontend mantém a porta padrão do Next.js (3000, sem necessidade de configuração extra). Backend movido do padrão do Nest (3000, colidiria com o frontend) para 3333. Deve ser refletido em `backend/.env.example` (`PORT=3333`), configuração de CORS do backend (origem permitida `http://localhost:3000`), e qualquer client de API no frontend apontando para `http://localhost:3333`.
+
+**D30 — TypeScript e Prisma travados em 5.9 / 6.19, sem upgrade para TS 7 / Prisma 7**
+`typescript-eslint` e `ts-jest` ainda não suportam TS 7 no momento da checagem; Prisma 7 quebraria a configuração atual de `package.json#prisma`. Nenhum agente deve atualizar essas dependências por iniciativa própria — revisão futura só se algo bloquear e passar pelo Arquiteto.
