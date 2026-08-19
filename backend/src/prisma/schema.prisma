@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ORGANIZER
+  CUSTOMER
+  GATE
+}
+
+enum ReservationStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+enum TicketStatus {
+  VALID
+  USED
+}
+
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  password         String
+  name             String
+  role             UserRole
+  refreshTokenHash String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organizedSessions Session[]     @relation("OrganizerSessions")
+  reservations      Reservation[]
+}
+
+model Movie {
+  id        String   @id @default(uuid())
+  tmdbId    Int      @unique
+  title     String
+  synopsis  String?
+  posterUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions Session[]
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  movieId     String
+  organizerId String
+  room        String
+  startsAt    DateTime
+  capacity    Int
+  price       Decimal  @db.Decimal(10, 2)
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  movie        Movie         @relation(fields: [movieId], references: [id])
+  organizer    User          @relation("OrganizerSessions", fields: [organizerId], references: [id])
+  seats        Seat[]
+  reservations Reservation[]
+
+  @@index([movieId])
+  @@index([organizerId])
+}
+
+model Seat {
+  id        String   @id @default(uuid())
+  sessionId String
+  row       String
+  number    Int
+  createdAt DateTime @default(now())
+
+  session      Session       @relation(fields: [sessionId], references: [id])
+  reservations Reservation[]
+
+  // Identidade do assento dentro da sessão — não tem relação com a regra
+  // de concorrência de reserva (ver comentário em Reservation abaixo).
+  @@unique([sessionId, row, number])
+}
+
+model Reservation {
+  id         String            @id @default(uuid())
+  sessionId  String
+  seatId     String
+  customerId String
+  status     ReservationStatus @default(PENDING)
+  expiresAt  DateTime
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  session  Session @relation(fields: [sessionId], references: [id])
+  seat     Seat    @relation(fields: [seatId], references: [id])
+  customer User    @relation(fields: [customerId], references: [id])
+  ticket   Ticket?
+
+  // 🔒 project-rules.md §4 (não-negociável): o mesmo assento nunca pode ter
+  // duas reservas ATIVAS (status PENDING ou PAID) simultâneas — mas PODE
+  // acumular múltiplas linhas EXPIRED/CANCELLED ao longo do tempo (assento
+  // reaberto após expiração/cancelamento, ver teste obrigatório §6.3).
+  // Um `@@unique([sessionId, seatId])` simples quebraria a reabertura do
+  // assento; um `@@unique([sessionId, seatId, status])` quebraria em caso de
+  // duas reservas diferentes que expiram/cancelam para o mesmo assento (duas
+  // linhas com o mesmo status repetido colidiriam). O Prisma DSL não suporta
+  // unique index parcial (cláusula WHERE), então a constraint real é criada
+  // via SQL bruto na migration:
+  //   CREATE UNIQUE INDEX reservation_active_seat_unique
+  //   ON "Reservation" ("sessionId", "seatId")
+  //   WHERE status IN ('PENDING', 'PAID');
+  // Decisão registrada em .context/project-state.md.
+  @@index([sessionId, seatId])
+  @@index([customerId])
+}
+
+model Ticket {
+  id            String       @id @default(uuid())
+  reservationId String       @unique
+  code          String       @unique
+  status        TicketStatus @default(VALID)
+  usedAt        DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+}
