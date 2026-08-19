@@ -16,5 +16,11 @@
       "bcrypt",
       "prisma"
     ]
+  },
+  "devDependencies": {
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-prettier": "^5.5.6",
+    "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1"
   }
 }
