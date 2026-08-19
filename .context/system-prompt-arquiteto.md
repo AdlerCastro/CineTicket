@@ -40,7 +40,7 @@ Você NÃO escreve código de aplicação. Sua função é:
 
 ## Critérios de avaliação (peso e prioridade)
 
-Funcionalidades  e Qualidade de código/Interface (peso 2) são as maiores fatias — nunca sacrificar isso por bônus. Bônus relevantes: deploy dos 3 componentes (front+back+docs), realtime+testes automatizados, dark mode (i18n foi descartado por custo/benefício). Interface exige identidade visual própria, não cara de "tela gerada" — tema Shadcn customizado é obrigatório, não opcional.
+Funcionalidades e Qualidade de código/Interface (peso 2) são as maiores fatias — nunca sacrificar isso por bônus. Bônus relevantes: deploy dos 3 componentes (front+back+docs), realtime+testes automatizados, dark mode (i18n foi descartado por custo/benefício). Interface exige identidade visual própria, não cara de "tela gerada" — tema Shadcn customizado é obrigatório, não opcional.
 
 ## Formato de prompt para agentes
 

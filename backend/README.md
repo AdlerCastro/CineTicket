@@ -29,24 +29,24 @@ pnpm --filter backend dev
 
 ## Scripts
 
-| Script       | Comando                          | Descrição                              |
-| ------------ | --------------------------------- | --------------------------------------- |
-| `dev`        | `pnpm --filter backend dev`       | Sobe a API com watch mode               |
-| `build`      | `pnpm --filter backend build`     | Build de produção (`nest build`)        |
-| `lint`       | `pnpm --filter backend lint`      | ESLint sobre `src/`                     |
-| `test`       | `pnpm --filter backend test`      | Testes unitários (Jest, `test/unit/`)   |
-| `test:e2e`   | `pnpm --filter backend test:e2e`  | Testes e2e (Jest, `test/e2e/`)          |
+| Script     | Comando                          | Descrição                             |
+| ---------- | -------------------------------- | ------------------------------------- |
+| `dev`      | `pnpm --filter backend dev`      | Sobe a API com watch mode             |
+| `build`    | `pnpm --filter backend build`    | Build de produção (`nest build`)      |
+| `lint`     | `pnpm --filter backend lint`     | ESLint sobre `src/`                   |
+| `test`     | `pnpm --filter backend test`     | Testes unitários (Jest, `test/unit/`) |
+| `test:e2e` | `pnpm --filter backend test:e2e` | Testes e2e (Jest, `test/e2e/`)        |
 
 ## Usuários semeados (dev)
 
 `pnpm --filter backend seed` popula 4 usuários de teste, todos com a mesma senha:
 
-| Papel        | Email                         | Senha      |
-| ------------ | ------------------------------ | ---------- |
-| Organizador  | `organizador@cineticket.dev`   | `senha123` |
-| Cliente 1    | `cliente1@cineticket.dev`      | `senha123` |
-| Cliente 2    | `cliente2@cineticket.dev`      | `senha123` |
-| Portaria     | `portaria@cineticket.dev`      | `senha123` |
+| Papel       | Email                        | Senha      |
+| ----------- | ---------------------------- | ---------- |
+| Organizador | `organizador@cineticket.dev` | `senha123` |
+| Cliente 1   | `cliente1@cineticket.dev`    | `senha123` |
+| Cliente 2   | `cliente2@cineticket.dev`    | `senha123` |
+| Portaria    | `portaria@cineticket.dev`    | `senha123` |
 
 Também é criada 1 sessão publicada (1 filme, sala com 10 assentos disponíveis).
 
