@@ -2,11 +2,11 @@
 
 > Atualizado ao fim de cada sprint (ou tarefa relevante) pelo agente que a executou. Fonte que qualquer agente lê antes de começar algo novo — se este arquivo estiver desatualizado, a tarefa seguinte corre o risco de trabalhar sobre premissa errada.
 
-**Última atualização:** 19/08 — Backend: porta fixa (3333) + Swagger + README.
+**Última atualização:** 19/08 — Frontend: Sprint 1 (Next.js + Tailwind/Shadcn customizado + TanStack Query + esqueleto de rotas).
 
 ## Fase atual
 
-Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`). Sprint 1: fundação do workspace pnpm completa, Postgres de dev containerizado, e agora a parte de backend do Sprint 1 (schema Prisma, migration, seed, config, módulos, schemas Zod) também concluída. Falta a parte de frontend do Sprint 1 (esqueleto de rotas) e o CI (`.github/workflows`, DevOps Agent).
+Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`). Sprint 1: fundação do workspace pnpm completa, Postgres de dev containerizado, parte de backend concluída (schema Prisma, migration, seed, config, módulos, schemas Zod), e agora a parte de frontend também concluída (Next.js, tema customizado, dark mode, TanStack Query, esqueleto das 4 rotas de grupo). Falta só o CI (`.github/workflows`, DevOps Agent) e `docker-compose.test.yml` para fechar o Sprint 1 por completo.
 
 ## Funcional
 
@@ -38,6 +38,25 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - Swagger configurado em `src/main.ts` (`@nestjs/swagger`, novo), disponível em `http://localhost:3333/docs` — validado com `curl` (HTTP 200).
 - `backend/README.md` criado: stack, como rodar isolado, porta/Swagger, tabela de scripts, credenciais reais dos 4 usuários semeados (`senha123`), referência ao `CLAUDE.md` para estrutura de módulos.
 
+**Frontend — Sprint 1 concluído:**
+
+- Projeto Next.js 14 (App Router) + TypeScript inicializado em `frontend/` (pnpm), ligado ao workspace via `@cineticket/shared: workspace:*`. `pnpm --filter frontend lint|build` rodam sem erro; `pnpm --filter frontend dev` sobe em `http://localhost:3000`.
+- TailwindCSS v3 + Shadcn UI configurados com tema customizado próprio ("Marquee": violeta ingresso `hsl(262 83% 45%)` + âmbar pipoca `hsl(38 92% 50%)`, tokens HSL completos em `src/styles/globals.css`, `--radius: 0.75rem`) — nunca o tema default indigo/slate do CLI. `components.json` aponta `components/ui` como destino do CLI do Shadcn (`button`, `input` já adicionados).
+- Dark mode via classe (`next-themes`, `attribute='class'`, `defaultTheme='dark'`) + toggle manual (`ThemeToggle`, molecule em `src/components/molecules/`) — confirmado no dev server que o script de aplicação de classe é injetado antes da hidratação (sem flash).
+- Estrutura de pastas 100% conforme `project-rules.md`/CLAUDE.md (D31): `components/{ui,molecules,organisms,templates}`, `app/{(public),(customer),(organizer),(gate)}`, `hooks/`, `constants/`, `enums/`, `types/`, `lib/`, `styles/`.
+- TanStack Query configurado (`src/lib/providers.tsx`, `QueryClientProvider` + `ReactQueryDevtools`) no layout raiz, junto do `ThemeProvider`.
+- React Hook Form + `@hookform/resolvers` instalados. Import de `@cineticket/shared` (`createReservationSchema`) validado via `tsc --noEmit` sem erro de resolução de módulo (arquivo de teste temporário, removido após validar — nenhum código de exemplo ficou no app, já que Sprint 1 não tem lógica de negócio ainda).
+- `src/lib/api-client.ts`: wrapper `fetch` fino (`get/post/patch/delete` + `ApiError`) apontando para `NEXT_PUBLIC_API_URL`, default `http://localhost:3333`. `.env.example` criado com `NEXT_PUBLIC_API_URL` e `NEXT_PUBLIC_WS_URL` (placeholder, Sprint 3).
+- Esqueleto das 4 rotas de grupo, cada uma com `layout.tsx` próprio: `(public)` → `/` (home/busca), `(customer)/my-tickets` → `/my-tickets`, `(organizer)/dashboard` → `/dashboard`, `(gate)/check-in` → `/check-in`. Sem lógica de negócio, só placeholder de título/descrição. Todas confirmadas respondendo HTTP 200 via `curl` contra o dev server real.
+
+### Decisões e riscos que surgiram durante a implementação (Frontend, Sprint 1)
+
+1. **Conflito real entre `frontend/CLAUDE.md` (pré-D18, descrevia `components/{ui,features}`) e `project-rules.md`/D18 (Atomic Design de 5 níveis, Shadcn dentro de `atoms/`) foi escalado ao usuário antes de tocar em qualquer código**, conforme a própria regra do CLAUDE.md ("se o prompt conflitar com este arquivo, reporte em vez de decidir sozinho"). Resolvido pelo usuário durante a sessão: `ui/` mantido (destino nativo do CLI do Shadcn) cumprindo o papel de "atoms", sem pasta `atoms/` separada — hierarquia final de 4 níveis `ui → molecules → organisms → templates`. Registrado como **D31** em `decisions-log.md`; `project-rules.md` e `frontend/CLAUDE.md` já corrigidos para refletir isso.
+2. **Stack escolhida deliberadamente conservadora**: Next.js 14 (não 15) + React 18 (não 19) + Tailwind v3 (não v4). Tailwind v4 troca `tailwind.config.ts` por `@theme` no CSS — a tarefa pede explicitamente tema customizado *no `tailwind.config`*, então v3 evita ambiguidade com esse critério de avaliação. Next 14/React 18 é o par mais maduro com o ecossistema Shadcn/Radix no momento, reduzindo risco de fricção de peer-deps num projeto de 7 dias. TypeScript mantido em `^5.7.2`, coerente com D30 (mesmo lock do backend).
+3. **Nomes de rota escolhidos pelo Frontend Agent, não especificados na tarefa**: `(customer)/my-tickets`, `(organizer)/dashboard`, `(gate)/check-in`. Necessário porque route groups do Next.js não geram segmento de URL — um `page.tsx` solto na raiz de cada um dos 4 grupos colidiria todo mundo em `/`. Cada grupo ficou com `layout.tsx` na raiz do grupo (sem segmento) e `page.tsx` num sub-caminho kebab-case representativo, para as 4 rotas responderem em URLs distintas e testáveis (critério de pronto da tarefa). `(public)` manteve `page.tsx` direto em `/` por ser a home. Nomes são placeholder — livres para o Arquiteto renomear antes do Sprint 3 se preferir outra convenção.
+4. **`.prettierrc` da raiz ainda não existe** (mesmo ponto já registrado pelo Backend Agent) — código formatado manualmente seguindo a convenção documentada em `project-rules.md` §3.
+5. **Build local fez retry em fontes do Google Fonts** (`fonts.googleapis.com`/`fonts.gstatic.com`, usadas via `next/font/google` para Inter/Poppins) antes de compilar com sucesso — rede instável no ambiente da sessão, não um erro de configuração. Vale monitorar em CI/deploy: se o ambiente de build não tiver acesso de saída à internet, `next/font/google` falha (não tem fallback automático); considerar hospedar as fontes localmente (`next/font/local`) se isso se confirmar um problema no Railway/Vercel.
+
 ### Decisões e riscos que surgiram durante a implementação (Backend, Sprint 1)
 
 1. **Constraint UNIQUE de `(sessionId, seatId)` implementada como índice único PARCIAL, não como `@@unique` simples no Prisma DSL.** Um `@@unique([sessionId, seatId])` comum bloquearia permanentemente a reabertura do assento após `EXPIRED`/`CANCELLED` (quebra o teste obrigatório de expiração, project-rules.md §6.3). Um `@@unique([sessionId, seatId, status])` também é incorreto: duas reservas diferentes que ambas terminam `EXPIRED` para o mesmo assento colidiriam no valor repetido do status. Prisma não suporta índice único com cláusula `WHERE` na DSL do `schema.prisma`, então a constraint real (`WHERE status IN ('PENDING','PAID')`) foi adicionada via SQL bruto na migration `20260819033158_init` (edição manual do `migration.sql`), documentada com comentário extenso no `schema.prisma` acima do model `Reservation`. Validado manualmente via `\d "Reservation"` no psql — índice `reservation_active_seat_unique` presente e com a cláusula `WHERE` correta. **Recomendo ao QA Agent testar explicitamente**: (a) duas reservas concorrentes para o mesmo assento (deve falhar exatamente uma), (b) reservar → deixar expirar → reservar de novo com outro cliente → deixar expirar de novo (não deve colidir).
@@ -55,7 +74,8 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - [x] Sprint 1 (infra) — Esqueleto de `backend/`, `frontend/` e `packages/shared/` reconhecido pelo pnpm (sem código de aplicação).
 - [x] Sprint 1 (infra) — Postgres de dev containerizado (`docker-compose.yml`) e `backend/.env.example` com `DATABASE_URL` de referência.
 - [x] Sprint 1 — Backend: schema Prisma completo, migration inicial, seed idempotente, config Zod, 9 módulos vazios, `packages/shared` com `userSchema`/`createSessionSchema`/`createReservationSchema`.
-- [ ] Sprint 1 — `docker-compose.test.yml`, esqueleto CI (DevOps), esqueleto de rotas frontend (Frontend Agent).
+- [x] Sprint 1 — Frontend: Next.js + TypeScript, Tailwind/Shadcn com tema customizado, dark mode via classe + toggle, TanStack Query, RHF+Zod (import de `@cineticket/shared` validado), `api-client.ts`, `.env.example`, esqueleto das 4 rotas de grupo.
+- [ ] Sprint 1 — `docker-compose.test.yml`, esqueleto CI (DevOps).
 - [ ] Sprint 2 — Core Backend: auth+guards, integração TMDb, sessões, assentos com constraint de concorrência (schema/índice já prontos — falta a lógica de aplicação dentro de `prisma.$transaction`). QA inicia teste de concorrência em paralelo.
 - [ ] Sprint 3 — Core Frontend + Realtime: consumo de sessões/assentos, WebSocket Gateway, mapa em tempo real. **Marco dia 5: decisão WebSocket vs. polling.**
 - [ ] Sprint 4 — Fluxo completo: pagamento simulado, ingresso (JWT+QR), portaria com todos os retornos.
