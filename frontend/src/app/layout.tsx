@@ -18,7 +18,8 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: 'CineTicket',
-  description: 'Reserva de ingressos de cinema com mapa de assentos em tempo real.',
+  description:
+    'Reserva de ingressos de cinema com mapa de assentos em tempo real.',
 };
 
 export default function RootLayout({
@@ -26,7 +27,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang='pt-BR' suppressHydrationWarning>
-      <body className={`${inter.variable} ${poppins.variable} font-sans antialiased`}>
+      <body
+        className={`${inter.variable} ${poppins.variable} font-sans antialiased`}
+      >
         <Providers>
           <header className='flex items-center justify-between border-b border-border px-6 py-4'>
             <span className='font-display text-lg font-bold text-primary'>

@@ -13,7 +13,9 @@ export function ThemeToggle() {
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
-    return <Button variant='ghost' size='icon' aria-hidden className='opacity-0' />;
+    return (
+      <Button variant='ghost' size='icon' aria-hidden className='opacity-0' />
+    );
   }
 
   const isDark = resolvedTheme === 'dark';
