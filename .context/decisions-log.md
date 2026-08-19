@@ -45,7 +45,7 @@ TanStack Query cobre dado de servidor; estado client-side puro (seleção de ass
 Vercel serverless não sustenta WebSocket persistente — por isso backend vai para Railway, que suporta processo long-running.
 
 **D14 — Internacionalização descartada**
-Custo de implementação (i18n completo) não compensava o peso do critério  frente ao tempo que tiraria de Funcionalidades . Dark mode mantido — barato, Tailwind/Shadcn já suportam nativamente.
+Custo de implementação (i18n completo) não compensava o retorno frente ao tempo que tiraria de funcionalidades centrais do escopo. Dark mode mantido — barato, Tailwind/Shadcn já suportam nativamente.
 
 **D15 — Tema Shadcn customizado obrigatório**
 Shadcn com tema default é o visual mais reconhecível de "app gerado por IA" — em tensão direta com o critério "identidade própria, sem cara genérica". Tema Tailwind customizado desde a config inicial, não ajuste cosmético depois.
@@ -93,3 +93,11 @@ Frontend mantém a porta padrão do Next.js (3000, sem necessidade de configura�
 
 **D30 — TypeScript e Prisma travados em 5.9 / 6.19, sem upgrade para TS 7 / Prisma 7**
 `typescript-eslint` e `ts-jest` ainda não suportam TS 7 no momento da checagem; Prisma 7 quebraria a configuração atual de `package.json#prisma`. Nenhum agente deve atualizar essas dependências por iniciativa própria — revisão futura só se algo bloquear e passar pelo Arquiteto.
+
+**D31 — Estrutura de componentes do frontend: `ui/` substitui `atoms/`, Atomic Design vira 4 níveis**
+Frontend Agent escalou conflito real entre `frontend/CLAUDE.md` (que ainda descrevia `components/{ui,features}`, versão pré-D18) e `project-rules.md`/D18 (Atomic Design de 5 níveis com Shadcn dentro de `atoms/`). Resolução: `components/ui/` mantido como destino nativo do CLI do Shadcn (evita fricção em todo `npx shadcn add` futuro) e cumpre o papel de "atoms" — nenhuma pasta `atoms/` separada é criada, seria redundante. Hierarquia final: `ui/` → `molecules/` → `organisms/` → `templates/` → `app/` (rotas). `project-rules.md` e `frontend/CLAUDE.md` atualizados para refletir isso.
+
+**D32 — Navegação e seleção de assento abertas a visitante; login exigido só na confirmação/pagamento**
+Usuário propôs inicialmente gatear a seleção de assento atrás de login (junto com perfil, compra e acesso de organizador). Testado e ajustado: gatear a seleção, não só a compra, adiciona fricção exatamente no momento de maior engajamento (a pessoa escolhendo o lugar), contradizendo o próprio objetivo de fluidez. Adotado **Desenho B**: seleção de assento é só estado local no frontend (`useState`, sem Zustand — já coberto por §7), nenhuma `Reservation` é criada no banco até o momento de confirmar. Só na confirmação: (1) checa autenticação, redireciona para login/cadastro se necessário; (2) autenticado, cria a `Reservation` real (`PENDING`, `customerId` preenchido, timer de 5min), protegida pela constraint UNIQUE + transação já definida (regra central do projeto).
+
+Desenho alternativo descartado (**Desenho A** — reserva anônima com `guestToken`, `customerId` nullable, "reivindicada" no login): exigiria migration adicional, lógica nova de "claim" e mais caminhos de erro (token expirado/inválido/já reivindicado), sem necessidade clara no escopo do projeto. Desenho B reaproveita 100% da proteção de concorrência já construída, sem mudança de schema — nenhum campo `guestToken` existe, `customerId` permanece obrigatório em `Reservation`.

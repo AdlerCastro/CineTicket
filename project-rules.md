@@ -6,13 +6,13 @@ Regras obrigatórias para qualquer agente (humano ou IA) que escreva código nes
 
 ## 1. Estrutura de pastas (monorepo)
 
-Backend segue o padrão idiomático do NestJS (módulo por domínio, gerado como `nest g module`). Frontend segue **Atomic Design** (Brad Frost) para organização de componentes — cinco níveis hierárquicos:
+Backend segue o padrão idiomático do NestJS (módulo por domínio, gerado como `nest g module`). Frontend segue **Atomic Design** (Brad Frost) adaptado à convenção de tooling do Shadcn — quatro níveis, não cinco:
 
-- **Atoms**: menor unidade de UI, sem lógica de negócio (`Button`, `Input`, `Badge`, `Spinner`). Geralmente já vêm prontos como `components/ui/` (Shadcn), tratados como átomos.
-- **Molecules**: combinação pequena de átomos com um propósito único (`SearchBar` = `Input` + `Button`; `SeatCell` = célula clicável do mapa).
-- **Organisms**: composição de moléculas/átomos formando uma seção completa e independente (`SeatMap`, `SessionCard`, `TicketQrDisplay`, `NavHeader`).
-- **Templates**: esqueleto de layout de página, sem dado real — define onde cada organism entra.
-- **Pages**: as rotas reais do Next.js App Router, que injetam dado nos templates.
+- **`ui/`**: componentes Shadcn puros, sem lógica de negócio (`Button`, `Input`, `Badge`, `Spinner`). Cumpre o papel de "atoms" — nomeado `ui/` (não `atoms/`) porque é o destino nativo do CLI do Shadcn; brigar contra essa convenção geraria fricção a cada `npx shadcn add`. Nenhuma pasta `atoms/` separada existe — seria redundante.
+- **`molecules/`**: combinação pequena de itens de `ui/` com um propósito único (`SearchBar` = `Input` + `Button`; `SeatCell` = célula clicável do mapa).
+- **`organisms/`**: composição de moléculas/`ui` formando uma seção completa e independente (`SeatMap`, `SessionCard`, `TicketQrDisplay`, `NavHeader`).
+- **`templates/`**: esqueleto de layout de página, sem dado real — define onde cada organism entra.
+- **`app/` (Next.js App Router)**: as rotas reais, que injetam dado nos templates — equivalente a "pages" do Atomic Design.
 
 Ambos os repositórios têm pastas de apoio dedicadas para `constants/`, `enums/`, `types/`, `schemas/` (quando aplicável) e `hooks/` — nunca misturado dentro de módulo/componente de domínio.
 
@@ -56,7 +56,7 @@ cineticket/
 │   │   │   ├── (organizer)/      # painel do organizador
 │   │   │   └── (gate)/           # portaria
 │   │   ├── components/
-│   │   │   ├── atoms/            # inclui os componentes shadcn (tema customizado)
+│   │   │   ├── ui/               # componentes Shadcn puros (tema customizado) — papel de "atoms"
 │   │   │   ├── molecules/
 │   │   │   ├── organisms/
 │   │   │   └── templates/
@@ -147,6 +147,8 @@ Prettier configurado na raiz do monorepo (`.prettierrc`), aplicado a `backend/` 
 - Constraint `UNIQUE` no banco em `(sessionId, seatId)` para reservas em estado ativo (`PENDING` ou `PAID`) — a segunda tentativa de reserva do mesmo assento **deve falhar no banco**, nunca só na checagem de aplicação.
 - Toda operação de criação de reserva roda dentro de transação (`prisma.$transaction`) com isolamento que impede corrida de leitura-antes-de-escrita.
 - Reserva em `PENDING` expira automaticamente após 5 minutos (job/cron ou verificação lazy no momento da leitura — decisão de implementação do Backend Agent, mas o comportamento é obrigatório).
+
+🔒 **Fluxo de reserva não exige autenticação prévia (D32):** a seleção visual de assento (navegação, mapa em tempo real via WebSocket) é acessível a visitante, sem conta. Nenhuma linha `Reservation` é criada nesse momento — é só estado local no frontend (`useState`). `Reservation.customerId` **nunca é nullable**: a linha só passa a existir no momento da confirmação/pagamento, quando o usuário já está autenticado. Login/cadastro é exigido exatamente nessa transição (seleção → confirmação), não antes. Não existe conceito de reserva "de visitante" persistida no banco — a concorrência entre visitantes escolhendo o mesmo assento antes de logar é resolvida pelo erro padrão de concorrência (acima) no momento em que a `Reservation` real é criada.
 
 🔒 **Ingresso:**
 
@@ -256,6 +258,6 @@ Branch mergeada em `develop` via PR, depois deletada. `develop → main` só qua
 
 ## 10. Documentação
 
-- Todo endpoint documentado via Swagger/OpenAPI (decorators do NestJS) — não é opcional, está no critério de deploy avaliado (critério de "documentação da API publicada").
+- Todo endpoint documentado via Swagger/OpenAPI (decorators do NestJS) — não é opcional, faz parte do critério de deploy avaliado ("documentação da API publicada").
 - README na raiz cobre: como subir o projeto (Docker Compose), como configurar a API TMDb (variável de ambiente, onde obter a key), como rodar testes, como acessar dados semeados (credenciais dos 4 usuários de teste), link de deploy.
 - Todo artefato de processo gerado com IA (specs, PRD, decisions-log) fica versionado em `.context/` e referenciado explicitamente no README — é critério de nota próprio ("Uso de IA").
