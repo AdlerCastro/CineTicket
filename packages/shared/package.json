@@ -1,0 +1,11 @@
+{
+  "name": "@cineticket/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "echo \"[shared] build script placeholder — configurar via tsc -p tsconfig.json\"",
+    "dev": "echo \"[shared] dev script placeholder — configurar via tsc --watch\""
+  }
+}

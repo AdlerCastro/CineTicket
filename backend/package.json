@@ -1,0 +1,11 @@
+{
+  "name": "@cineticket/backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"[backend] dev script placeholder — configurar via nest start --watch\"",
+    "build": "echo \"[backend] build script placeholder — configurar via nest build\"",
+    "lint": "echo \"[backend] lint script placeholder — configurar via eslint\"",
+    "test": "echo \"[backend] test script placeholder — configurar via jest\""
+  }
+}

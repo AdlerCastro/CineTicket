@@ -2,20 +2,23 @@
 
 > Atualizado ao fim de cada sprint (ou tarefa relevante) pelo agente que a executou. Fonte que qualquer agente lê antes de começar algo novo — se este arquivo estiver desatualizado, a tarefa seguinte corre o risco de trabalhar sobre premissa errada.
 
-**Última atualização:** 19/08 — Sprint 1 iniciado: workspace root do monorepo criado.
+**Última atualização:** 19/08 — Sprint 1: esqueleto de workspace do monorepo completo (4/4 workspaces reconhecidos).
 
 ## Fase atual
 
-Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`). Sprint 1 iniciado: fundação do workspace pnpm criada.
+Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`). Sprint 1 em andamento: fundação do workspace pnpm completa.
 
 ## Funcional
 
-- **Workspace root do monorepo**: `pnpm-workspace.yaml` (registra `backend`, `frontend`, `packages/*`) e `package.json` raiz mínimo (`cineticket`, `private: true`, scripts delegando para `pnpm -r`) criados. `pnpm install` roda sem erro na raiz.
-  - ⚠️ Pendência conhecida: `pnpm -r list` hoje só reconhece o root (`cineticket@0.1.0`) — `backend/`, `frontend/` e `packages/shared/` ainda não têm `package.json` próprio (fora do escopo desta tarefa, que não podia tocar `backend/`/`frontend/`). O critério de pronto completo ("`pnpm -r list` confirma os 3 workspaces") só fecha quando o Backend Agent criar `packages/shared/package.json` + `backend/package.json` e o Frontend Agent criar `frontend/package.json`, ambos previstos ainda no Sprint 1.
+- **Workspace root do monorepo**: `pnpm-workspace.yaml` (registra `backend`, `frontend`, `packages/*`) e `package.json` raiz mínimo (`cineticket`, `private: true`, scripts delegando para `pnpm -r`) criados.
+- **Esqueleto de workspace completo**: `packages/shared/package.json` (`@cineticket/shared`, `main`/`types` apontando para `dist/`) + `tsconfig.json`; `backend/package.json` (`@cineticket/backend`) e `frontend/package.json` (`@cineticket/frontend`) mínimos, só com scripts placeholder (`dev`/`build`/`lint`/`test`), sem dependências reais nem código-fonte (`src/` de cada um vazio ou inexistente).
+  - `pnpm -r list` na raiz confirma os 4 workspace projects: `cineticket` (root), `@cineticket/backend`, `@cineticket/frontend`, `@cineticket/shared`. Critério de pronto do esqueleto de infraestrutura fechado.
+  - **Nenhum código de aplicação foi escrito** — Backend Agent e Frontend Agent podem começar a trabalhar (dependências reais, schema Prisma, schemas Zod, rotas Next.js) sem novo bloqueio de infraestrutura de workspace.
 
 ## Pendente (ordem de sprint, ver `agent-ecosystem.md`)
 
-- [x] Sprint 1 (parcial) — Workspace root do monorepo (`pnpm-workspace.yaml` + `package.json` raiz).
+- [x] Sprint 1 (infra) — Workspace root do monorepo (`pnpm-workspace.yaml` + `package.json` raiz).
+- [x] Sprint 1 (infra) — Esqueleto de `backend/`, `frontend/` e `packages/shared/` reconhecido pelo pnpm (sem código de aplicação).
 - [ ] Sprint 1 — Fundação: Docker Compose (dev+test), esqueleto CI, schema Prisma completo, `packages/shared` com schemas Zod, esqueleto de rotas frontend.
 - [ ] Sprint 2 — Core Backend: auth+guards, integração TMDb, sessões, assentos com constraint de concorrência. QA inicia teste de concorrência em paralelo.
 - [ ] Sprint 3 — Core Frontend + Realtime: consumo de sessões/assentos, WebSocket Gateway, mapa em tempo real. **Marco dia 5: decisão WebSocket vs. polling.**

@@ -1,0 +1,11 @@
+{
+  "name": "@cineticket/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"[frontend] dev script placeholder — configurar via next dev\"",
+    "build": "echo \"[frontend] build script placeholder — configurar via next build\"",
+    "lint": "echo \"[frontend] lint script placeholder — configurar via next lint\"",
+    "test": "echo \"[frontend] test script placeholder — configurar via jest/vitest\""
+  }
+}

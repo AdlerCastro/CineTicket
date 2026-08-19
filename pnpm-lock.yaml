@@ -7,3 +7,9 @@ settings:
 importers:
 
   .: {}
+
+  backend: {}
+
+  frontend: {}
+
+  packages/shared: {}
