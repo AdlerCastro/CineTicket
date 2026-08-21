@@ -2,11 +2,11 @@
 
 > Atualizado ao fim de cada sprint (ou tarefa relevante) pelo agente que a executou. Fonte que qualquer agente lê antes de começar algo novo — se este arquivo estiver desatualizado, a tarefa seguinte corre o risco de trabalhar sobre premissa errada.
 
-**Última atualização:** 19/08 — Backend: porta fixa (3333) + Swagger + README.
+**Última atualização:** 21/08 — Backend Sprint 2: revisão de auth/movies (bugs corrigidos) + sessions/seats/reservations implementados.
 
 ## Fase atual
 
-Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`). Sprint 1: fundação do workspace pnpm completa, Postgres de dev containerizado, e agora a parte de backend do Sprint 1 (schema Prisma, migration, seed, config, módulos, schemas Zod) também concluída. Falta a parte de frontend do Sprint 1 (esqueleto de rotas) e o CI (`.github/workflows`, DevOps Agent).
+Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`, agora até `D35`). Sprint 1 completo (workspace, Postgres de dev, schema/migration/seed/config/módulos vazios do backend). Sprint 2 (Core Backend) concluído: auth+guards revisado e corrigido, integração TMDb, sessões/assentos/reservas com concorrência de assento validada manualmente ponta a ponta (ver seção Backend/Sprint 2). Falta: parte de frontend do Sprint 1 (esqueleto de rotas), CI (DevOps Agent), teste adversarial automatizado de concorrência (QA Agent), payments/tickets/gate (Sprint 4).
 
 ## Funcional
 
@@ -38,6 +38,44 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - Swagger configurado em `src/main.ts` (`@nestjs/swagger`, novo), disponível em `http://localhost:3333/docs` — validado com `curl` (HTTP 200).
 - `backend/README.md` criado: stack, como rodar isolado, porta/Swagger, tabela de scripts, credenciais reais dos 4 usuários semeados (`senha123`), referência ao `CLAUDE.md` para estrutura de módulos.
 
+**Backend — Sprint 2 (auth/movies revisados + sessions/seats/reservations novos):**
+
+Revisão de `auth/` e `movies/` (código escrito manualmente antes desta sessão, não presumido correto — revisado e corrigido antes de continuar). Bugs reais encontrados e corrigidos, validados rodando a aplicação de ponta a ponta (não só lint/tsc):
+
+- `JwtModule.registerAsync` sem `inject: [AppConfigService]` — `useFactory` rodava sem argumento, `config` chegava `undefined`, app **crashava no bootstrap**. Confirmado subindo o Nest antes/depois da correção.
+- `sanitizeUser` em `auth.service.ts` só removia `password`, deixando `refreshTokenHash` vazar em `/auth/login` — violação direta da regra não-negociável de campo sensível.
+- `MoviesModule` com `controllers: []`/`exports: []` — a rota `/movies/search` não existia de fato e `MoviesService` não estava disponível para outros módulos (bloqueava o `SessionsModule` novo).
+- Interfaces `TmdbMovieSummary`/`TmdbMovieDetails` não exportadas de `tmdb.service.ts` — build quebrava (`TS4053`) ao inferir tipo de retorno entre arquivos.
+- `findOrCacheMovie` sem tratamento de corrida no `create()` — duas chamadas concorrentes para o mesmo `tmdbId` colidiam sem captura de erro; agora recupera via `P2002`.
+- Dependência quebrada `"jwt": "link:@nestjs/@nestjs/jwt"` removida de `package.json` (link inválido, não usada, não estava nem no lockfile).
+- `tsconfig.json`: `paths` de `@cineticket/shared` apontava pro **source** do pacote (`packages/shared/src`), violando `rootDir` assim que algo em `backend/src` importasse de lá pra valer (primeira vez que aconteceu, com o `SessionsModule` novo). Corrigido para resolver via `node_modules`/`dist` (build normal do workspace).
+
+Commit único (`feat`, sem separar em dois porque os arquivos nunca tinham sido commitados antes — não dava pra isolar "original" de "correção" via `git add -p` com segurança sem reescrever conteúdo no disco).
+
+Módulos novos — `sessions/`, `seats/`, `reservations/` (Sprint 2 core, concorrência de assento):
+
+- **Sessions**: `GET /sessions` e `GET /sessions/:id` públicos, sem guard (D32). `POST /sessions` e `PATCH /sessions/:id` atrás de `@Roles('ORGANIZER')`; edição verifica `organizerId === usuário autenticado` no service (`ForbiddenException` senão, D10). Criação chama `MoviesService.findOrCacheMovie` **antes** de abrir `prisma.$transaction`, depois cria `Session` + `Seat[]` atomicamente dentro da transação. Layout de assento derivado só de `capacity` (não há input de linha/coluna no DTO): `SEATS_PER_ROW = 10` (`src/constants/seat.constants.ts`), linhas A, B, C... preenchidas em sequência.
+- **Seats**: `GET /sessions/:sessionId/seats` público, sem guard (D32). Status por assento calculado a partir de `Reservation` ativa (`PENDING`/`PAID`) via `include` — `AVAILABLE` se não houver nenhuma.
+- **Reservations**: `POST /reservations` atrás de `@Roles('CUSTOMER')` (D32 — só a confirmação exige login, não a navegação/seleção). `sessionId`/`seatId` validados por existência antes da tentativa (404 claro em vez de erro de FK cru). `expiresAt = now + 5min` (`RESERVATION_TTL_MINUTES`, `src/constants/reservation.constants.ts`, D05). Criação dentro de `prisma.$transaction`; `P2002` da constraint UNIQUE parcial (`sessionId`, `seatId` WHERE status ativo, já criada no Sprint 1) vira `ConflictException("Assento já reservado")`.
+- **Expiração de reserva PENDING — decisão de implementação (verificação LAZY, não job/cron)**: a constraint UNIQUE parcial só cobre `status IN ('PENDING','PAID')`, então uma linha `PENDING` vencida continua bloqueando o assento até algo virar seu `status` para `EXPIRED` — não basta filtrar na leitura. `ReservationsService.expireStalePendingForSession(sessionId)` faz esse `updateMany` e é chamado em dois pontos: (1) antes de montar o mapa de assentos (`SeatsService.getSeatMap`) e (2) antes de tentar criar uma reserva nova (`ReservationsService.create`), sempre escopado à sessão/assento em questão. Razão da escolha: sem `@nestjs/schedule`/worker separado, sem infraestrutura de job para testar, e o sweep dispara exatamente nos dois momentos em que a informação importa de verdade (ler disponibilidade, tentar reservar) — não deixa uma janela de N segundos como um cron fixo deixaria. Trade-off aceito: um assento só "aparece" livre de novo quando alguém de fato lê o mapa ou tenta reservar depois do vencimento; não há um processo em background liberando proativamente.
+- Validação de entrada: `ZodValidationPipe` genérico novo (`src/common/pipes/zod-validation.pipe.ts`), aplicado com `createSessionSchema`/`updateSessionSchema`/`createReservationSchema` de `@cineticket/shared`. `updateSessionSchema` é schema novo em `packages/shared` (não altera `createSessionSchema`, que já é consumido) — `tmdbId`/`capacity` de propósito fora do update, mudar depois quebraria a correspondência `Session`↔`Seat[]` já gerada.
+
+Validado manualmente rodando a API real contra o Postgres de dev (não só lint/build):
+
+- Sessão criada via `POST /sessions` com `tmdbId` já cacheado no seed → 13 assentos gerados (10 na linha A, 3 na B), atômico com a sessão.
+- `GET /sessions/:id/seats` sem token → 200 com todos `AVAILABLE`.
+- **Concorrência real**: duas requisições `POST /reservations` disparadas em paralelo pro mesmo assento (dois clientes diferentes) → exatamente uma `201`, a outra `409 Conflict` com `"Assento já reservado"`. Critério de pronto da tarefa confirmado batendo na API de verdade, não só lido no código.
+- Expiração: forçado `expiresAt` no passado direto no banco → `GET .../seats` seguinte já mostra `AVAILABLE` (sweep lazy rodou), nova reserva no mesmo assento por outro cliente → `201`; linha antiga fica `EXPIRED` no banco (não colide com a nova, confirma o índice parcial funcionando com múltiplas linhas `EXPIRED`/ativa coexistindo).
+- `@Roles` funcionando: organizador tentando `POST /reservations` → `403`; sem token → `401`.
+- `PATCH /sessions/:id` pelo dono → `200`; campo fora do schema (`capacity`) enviado no body → silenciosamente descartado pelo Zod (`updateSessionSchema` não tem esse campo), sessão não muda.
+
+### Ambiguidades resolvidas sem travar a tarefa (Backend, Sprint 2)
+
+1. `GET /sessions` retorna todas as sessões, sem filtrar por `published` — a tarefa só pediu "leitura sem filtro de organizerId" (D10), não mencionou rascunho vs. publicada, e não quis inventar regra de produto não pedida. Pode valer revisar com o Arquiteto: sessão não publicada aparecendo pra visitante talvez não seja o desejado.
+2. Layout de assento (linhas/colunas) a partir só de `capacity`: decisão de implementação minha (`SEATS_PER_ROW = 10`), já que `createSessionSchema` não tem input de linha/coluna. Reversível/ajustável sem migration.
+3. `/auth/login` continua sem `ZodValidationPipe` (violação de project-rules.md §5, "Validação Zod obrigatória em toda entrada") — pré-existente, fora do checklist explícito da revisão de auth desta sessão, não corrigido para não expandir escopo sem pedido. Sinalizado aqui para follow-up.
+4. D35 (retry com backoff na conexão inicial do Prisma) ainda **não implementado** — `PrismaService.onModuleInit()` continua com `$connect()` direto, sem retry. Fora do escopo desta tarefa (não é módulo de domínio), mas é risco real de crash-loop em deploy (Railway) já registrado em D35/decisions-log.
+
 ### Decisões e riscos que surgiram durante a implementação (Backend, Sprint 1)
 
 1. **Constraint UNIQUE de `(sessionId, seatId)` implementada como índice único PARCIAL, não como `@@unique` simples no Prisma DSL.** Um `@@unique([sessionId, seatId])` comum bloquearia permanentemente a reabertura do assento após `EXPIRED`/`CANCELLED` (quebra o teste obrigatório de expiração, project-rules.md §6.3). Um `@@unique([sessionId, seatId, status])` também é incorreto: duas reservas diferentes que ambas terminam `EXPIRED` para o mesmo assento colidiriam no valor repetido do status. Prisma não suporta índice único com cláusula `WHERE` na DSL do `schema.prisma`, então a constraint real (`WHERE status IN ('PENDING','PAID')`) foi adicionada via SQL bruto na migration `20260819033158_init` (edição manual do `migration.sql`), documentada com comentário extenso no `schema.prisma` acima do model `Reservation`. Validado manualmente via `\d "Reservation"` no psql — índice `reservation_active_seat_unique` presente e com a cláusula `WHERE` correta. **Recomendo ao QA Agent testar explicitamente**: (a) duas reservas concorrentes para o mesmo assento (deve falhar exatamente uma), (b) reservar → deixar expirar → reservar de novo com outro cliente → deixar expirar de novo (não deve colidir).
@@ -56,7 +94,7 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - [x] Sprint 1 (infra) — Postgres de dev containerizado (`docker-compose.yml`) e `backend/.env.example` com `DATABASE_URL` de referência.
 - [x] Sprint 1 — Backend: schema Prisma completo, migration inicial, seed idempotente, config Zod, 9 módulos vazios, `packages/shared` com `userSchema`/`createSessionSchema`/`createReservationSchema`.
 - [ ] Sprint 1 — `docker-compose.test.yml`, esqueleto CI (DevOps), esqueleto de rotas frontend (Frontend Agent).
-- [ ] Sprint 2 — Core Backend: auth+guards, integração TMDb, sessões, assentos com constraint de concorrência (schema/índice já prontos — falta a lógica de aplicação dentro de `prisma.$transaction`). QA inicia teste de concorrência em paralelo.
+- [x] Sprint 2 — Core Backend: auth+guards (revisado e com bugs corrigidos), integração TMDb, sessões (com geração atômica de assentos), assentos (mapa com status), reservas com constraint de concorrência aplicada dentro de `prisma.$transaction` — validado manualmente com requisições concorrentes reais (ver seção Backend/Sprint 2 acima). Falta: QA Agent formalizar isso como teste automatizado (`test/e2e`), payments/tickets/gate (fora do escopo desta tarefa).
 - [ ] Sprint 3 — Core Frontend + Realtime: consumo de sessões/assentos, WebSocket Gateway, mapa em tempo real. **Marco dia 5: decisão WebSocket vs. polling.**
 - [ ] Sprint 4 — Fluxo completo: pagamento simulado, ingresso (JWT+QR), portaria com todos os retornos.
 - [ ] Sprint 5 — Testes finais, deploy Railway+Vercel, README, seed de dados, revisão contra critérios de avaliação.
@@ -64,10 +102,12 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 ## Riscos abertos
 
 1. **WebSocket** — maior risco técnico assumido conscientemente. Sem fallback implementado ainda; se Sprint 3 não estabilizar até dia 5, decisão de queda para polling precisa ser tomada explicitamente pelo Arquiteto, registrada em `decisions-log.md`.
-2. **Concorrência de assento** — regra central do projeto. Constraint UNIQUE parcial em `(sessionId, seatId)` já implementada no banco (ver decisão #1 da seção Backend/Sprint 1 acima) e validada manualmente via `\d`. Falta ainda: (a) a lógica de aplicação da criação de reserva dentro de `prisma.$transaction` (Sprint 2), e (b) o teste adversarial automatizado de concorrência real do QA Agent — até lá, a constraint de banco não foi provada sob carga concorrente de verdade, só inspecionada estaticamente.
+2. **Concorrência de assento** — regra central do projeto. Constraint UNIQUE parcial em `(sessionId, seatId)` implementada no banco (Sprint 1) e criação de reserva dentro de `prisma.$transaction` implementada (Sprint 2, ver seção Backend/Sprint 2 acima) — validado manualmente com duas requisições HTTP concorrentes reais (uma `201`, outra `409`). Falta ainda: teste adversarial **automatizado** em `test/e2e` (QA Agent) — a validação de hoje foi manual, não fica travada em CI.
 3. **Deploy Railway com WebSocket** — não validado ainda que o plano gratuito do Railway sustenta conexão persistente sem interrupção; verificar cedo (Sprint 1 ou início do Sprint 3), não deixar para o Sprint 5.
 
 ## Decisões pendentes de revisão futura
 
-1. Backfill de `D27`–`D29` em `decisions-log.md` (ver item 6 da seção "Decisões e riscos" do Backend acima) — quem tiver escopo sobre o arquivo precisa registrar as decisões tomadas fora do ciclo formal.
-2. Upgrade para TypeScript 7 / Prisma 7 — adiado deliberadamente (ver item 7 da mesma seção). Revisitar perto do fim do projeto ou se algum bug específico exigir.
+1. ~~Backfill de `D27`–`D29`~~ — resolvido: Arquiteto atualizou `decisions-log.md` até `D35` durante o Sprint 2.
+2. Upgrade para TypeScript 7 / Prisma 7 — adiado deliberadamente (ver item 7 da seção Backend/Sprint 1 acima). Revisitar perto do fim do projeto ou se algum bug específico exigir.
+3. `/auth/login` sem `ZodValidationPipe` (ver "Ambiguidades resolvidas", Backend/Sprint 2, item 3) — violação de project-rules.md §5, não corrigida por estar fora do checklist explícito da revisão desta sessão.
+4. D35 (retry com backoff na conexão inicial do Prisma) ainda não implementado (ver item 4 da mesma seção) — risco de crash-loop em deploy.
