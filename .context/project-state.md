@@ -2,7 +2,7 @@
 
 > Atualizado ao fim de cada sprint (ou tarefa relevante) pelo agente que a executou. Fonte que qualquer agente lê antes de começar algo novo — se este arquivo estiver desatualizado, a tarefa seguinte corre o risco de trabalhar sobre premissa errada.
 
-**Última atualização:** 21/08 — Backend Sprint 2: revisão de auth/movies (bugs corrigidos) + sessions/seats/reservations implementados. Consolida também Frontend Sprint 1, DevOps Sprint 1 e os dois Dockerfiles, que estavam registrados em `develop` separadamente da branch de Sprint 2.
+**Última atualização:** 21/08 — QA Agent: testes e2e automatizados de concorrência de assento e expiração de reserva (banco de teste real, porta 5435), determinísticos em múltiplas execuções. Teste de ingresso duplicado documentado como bloqueado (Sprint 4). Consolida também Backend Sprint 2 (revisão de auth/movies + sessions/seats/reservations), Frontend Sprint 1, DevOps Sprint 1 e os dois Dockerfiles, que estavam registrados em `develop` separadamente da branch de Sprint 2.
 
 ## Fase atual
 
@@ -12,7 +12,7 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 
 **Sprint 2 (Core Backend) concluído:** auth+guards revisado e corrigido, integração TMDb, sessões/assentos/reservas com concorrência de assento validada manualmente ponta a ponta (ver seção "Backend — Sprint 2" abaixo).
 
-**Falta:** integração dos Dockerfiles no `docker-compose.yml`/deploy Railway (`context: .` já confirmado como requisito, ver seção Dockerfile), teste adversarial automatizado de concorrência (QA Agent — a validação de Sprint 2 foi manual, não travada em CI), Frontend Sprint 2/3, payments/tickets/gate (Sprint 4).
+**Falta:** integração dos Dockerfiles no `docker-compose.yml`/deploy Railway (`context: .` já confirmado como requisito, ver seção Dockerfile), Frontend Sprint 2/3, payments/tickets/gate (Sprint 4) — incluindo o teste automatizado de ingresso duplicado, bloqueado até essa rota existir (ver seção "QA — Sprint 2" abaixo).
 
 ## Funcional
 
@@ -87,6 +87,16 @@ Módulos novos — `sessions/`, `seats/`, `reservations/`:
 
 Validado manualmente contra a API real: sessão gera assentos atomicamente; concorrência real testada (duas reservas simultâneas no mesmo assento → uma `201`, outra `409`); expiração libera assento corretamente; guards respondendo 401/403 como esperado.
 
+**QA — Sprint 2 (testes e2e automatizados, mentalidade adversarial):**
+
+Suíte nova em `backend/test/e2e/`, rodada contra o banco de teste real (`docker-compose.test.yml`, porta 5435 — nunca o banco de dev). `test/e2e/support/global-setup.js` roda `src/prisma/seed.ts` (sem modificação) uma vez no início da suíte, só para materializar os 4 usuários fixos; a sessão/assentos que o seed também cria não são reaproveitados por nenhum spec — cada teste cria sua própria `Session`+`Seat` descartável direto via Prisma (`support/fixtures.ts`).
+
+- **`reservations-concurrency.e2e-spec.ts`** — 5 rodadas × 5 clientes concorrentes (mais que os 2 clientes fixos do seed, criados sob demanda via Prisma com token JWT assinado diretamente) disputando o mesmo assento via `POST /reservations` simultâneo. **PASSOU**, de forma determinística em 5 execuções completas seguidas (25 rodadas no total, 125 requisições concorrentes): exatamente 1 `201` e o restante `409` em toda rodada, nunca 500, e o banco sempre reflete exatamente 1 reserva ativa (`PENDING`/`PAID`) por assento. Confirma que a constraint UNIQUE parcial + transação (D06) resistem a concorrência real, não só ao teste manual do Backend Agent.
+- **`reservation-expiration.e2e-spec.ts`** — força uma `Reservation` `PENDING` com `expiresAt` no passado direto via Prisma. **PASSOU**: `GET /sessions/:id/seats` mostra o assento `AVAILABLE` (sweep lazy), um novo cliente consegue reservar com `201`, e a reserva antiga permanece no banco como `EXPIRED` (não deletada, não colide com a nova linha `PENDING`).
+- **`ticket-single-use.e2e-spec.ts`** — **BLOQUEADO, não implementado.** `payments/` e `tickets/` continuam módulos vazios (`@Module({})`), sem rota de validação de portaria para exercitar. Marcado `describe.skip` com o roteiro completo documentado em comentário para quando o Sprint 4 implementar a rota — decisão explícita de não inventar mock/endpoint fake que não reflita o comportamento real futuro.
+
+Nenhum bug de concorrência/expiração foi encontrado — o código do Sprint 2 resistiu ao teste adversarial. Um problema pré-existente e não relacionado foi encontrado ao rodar `pnpm --filter backend lint` (comando de validação obrigatório): 28 arquivos de `src/` (todo `auth/`, `movies/`, `sessions/`, `seats/`, `reservations/`, guards/decorators/pipes/types comuns) usam aspas duplas, violando `singleQuote: true` do Prettier — 173 erros de lint, nenhum deles em arquivo tocado por este QA Agent. Não corrigido aqui: é uma violação de formatação pré-existente em todo o Sprint 2 (não um bug de lógica encontrado ao testar concorrência/expiração/ingresso), e corrigi-la exigiria um `--fix` em massa de 28 arquivos fora do escopo desta tarefa — registrado como risco aberto para o Backend Agent revisar em commit `style` separado.
+
 ### Ambiguidades resolvidas sem travar a tarefa (Backend, Sprint 2)
 
 1. `GET /sessions` retorna todas as sessões sem filtrar `published` — não foi pedido, vale revisão futura.
@@ -122,7 +132,8 @@ Validado manualmente contra a API real: sessão gera assentos atomicamente; conc
 - [x] Sprint 1 — `docker-compose.test.yml` + CI.
 - [x] Pós-Sprint 1 — `backend/Dockerfile` e `frontend/Dockerfile`, validados localmente. Falta integração no `docker-compose.yml`/deploy Railway.
 - [x] Pós-Sprint 1 — Integração ESLint + Prettier.
-- [x] Sprint 2 — Core Backend: auth+guards revisado, TMDb, sessions/seats/reservations com concorrência validada manualmente. Falta: QA formalizar como teste automatizado.
+- [x] Sprint 2 — Core Backend: auth+guards revisado, TMDb, sessions/seats/reservations com concorrência validada manualmente.
+- [x] Sprint 2 — QA: teste automatizado e2e de concorrência de assento e de expiração de reserva (determinísticos, banco de teste real). Teste de ingresso duplicado bloqueado por dependência do Sprint 4 (payments/tickets/gate).
 - [ ] Sprint 2/3 — Frontend: não iniciado além do esqueleto do Sprint 1.
 - [ ] Sprint 3 — Core Frontend + Realtime (WebSocket). **Marco dia 5: decisão WebSocket vs. polling.**
 - [ ] Sprint 4 — Pagamento simulado, ingresso (JWT+QR), portaria.
@@ -131,10 +142,11 @@ Validado manualmente contra a API real: sessão gera assentos atomicamente; conc
 ## Riscos abertos
 
 1. **WebSocket** — sem fallback implementado; decisão de queda para polling no dia 5, se necessário, é do Arquiteto.
-2. **Concorrência de assento** — constraint parcial + transação implementadas e validadas manualmente (uma `201`, outra `409`). Falta teste **automatizado** em CI (QA Agent).
+2. ~~Concorrência de assento sem teste automatizado~~ — **resolvido**: `backend/test/e2e/reservations-concurrency.e2e-spec.ts` cobre isso contra o banco de teste real, determinístico em múltiplas execuções locais (ver seção "QA — Sprint 2"). Falta só confirmar que passa dentro do GitHub Actions de verdade (ver risco #4, já existente).
 3. **Deploy Railway com WebSocket** — não validado se o plano gratuito sustenta conexão persistente sem interrupção.
 4. **CI nunca rodou dentro do GitHub Actions de verdade** (só validação estática + reprodução manual) — confirmar no primeiro PR real.
 5. **Boot do backend crasha, não trava, sem Postgres acessível** — sem D35 implementada, risco de crash-loop no Railway. Prioridade antes do Sprint 5.
+6. **`pnpm --filter backend lint` falha com 173 erros pré-existentes** (aspas duplas em vez de simples, `singleQuote: true` do Prettier) em 28 arquivos de `src/` de Sprint 2 (`auth/`, `movies/`, `sessions/`, `seats/`, `reservations/`, `common/{guards,decorators,pipes,types}`). Encontrado pelo QA Agent ao rodar o comando de validação obrigatório do CLAUDE.md, fora do escopo desta tarefa (não é bug de concorrência/expiração/ingresso) — não corrigido aqui. CI atual bloquearia merge por causa disso; prioridade para o Backend Agent antes do próximo PR.
 
 ## Decisões pendentes de revisão futura
 
