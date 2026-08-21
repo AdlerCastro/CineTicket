@@ -25,8 +25,8 @@
  *   3. Repetir a mesma validação com o mesmo código — esperar rejeição
  *      determinística (ex.: 409/422), nunca sucesso na segunda tentativa.
  */
-describe.skip("Ingresso não reutilizável (validação de portaria) — BLOQUEADO (Sprint 4: payments/tickets/gate ainda não implementados)", () => {
-  it("segunda validação do mesmo ticket é rejeitada de forma determinística", () => {
+describe.skip('Ingresso não reutilizável (validação de portaria) — BLOQUEADO (Sprint 4: payments/tickets/gate ainda não implementados)', () => {
+  it('segunda validação do mesmo ticket é rejeitada de forma determinística', () => {
     // Pendente: endpoint de validação de portaria ainda não existe.
   });
 });

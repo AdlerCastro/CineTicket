@@ -1,8 +1,8 @@
 // src/modules/movies/movies.service.ts
-import { Injectable } from "@nestjs/common";
-import { Movie, Prisma } from "@prisma/client";
-import { PrismaService } from "../../prisma/prisma.service";
-import { TmdbService, TmdbMovieSummary } from "./tmdb.service";
+import { Injectable } from '@nestjs/common';
+import { Movie, Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { TmdbService, TmdbMovieSummary } from './tmdb.service';
 
 @Injectable()
 export class MoviesService {
@@ -33,7 +33,7 @@ export class MoviesService {
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
+        error.code === 'P2002'
       ) {
         return this.prisma.movie.findUniqueOrThrow({ where: { tmdbId } });
       }
@@ -42,6 +42,6 @@ export class MoviesService {
   }
 
   findAllCached() {
-    return this.prisma.movie.findMany({ orderBy: { title: "asc" } });
+    return this.prisma.movie.findMany({ orderBy: { title: 'asc' } });
   }
 }

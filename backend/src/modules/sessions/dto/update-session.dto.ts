@@ -1,3 +1,3 @@
-import { UpdateSessionInput } from "@cineticket/shared";
+import { UpdateSessionInput } from '@cineticket/shared';
 
 export type UpdateSessionDto = UpdateSessionInput;

@@ -2,13 +2,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from "@nestjs/common";
-import { Prisma, Session } from "@prisma/client";
-import { PrismaService } from "@/prisma/prisma.service";
-import { MoviesService } from "@/modules/movies/movies.service";
-import { SEATS_PER_ROW } from "@/constants/seat.constants";
-import { CreateSessionDto } from "./dto/create-session.dto";
-import { UpdateSessionDto } from "./dto/update-session.dto";
+} from '@nestjs/common';
+import { Prisma, Session } from '@prisma/client';
+import { PrismaService } from '@/prisma/prisma.service';
+import { MoviesService } from '@/modules/movies/movies.service';
+import { SEATS_PER_ROW } from '@/constants/seat.constants';
+import { CreateSessionDto } from './dto/create-session.dto';
+import { UpdateSessionDto } from './dto/update-session.dto';
 
 @Injectable()
 export class SessionsService {
@@ -18,12 +18,12 @@ export class SessionsService {
   ) {}
 
   findAll(): Promise<Session[]> {
-    return this.prisma.session.findMany({ orderBy: { startsAt: "asc" } });
+    return this.prisma.session.findMany({ orderBy: { startsAt: 'asc' } });
   }
 
   async findOne(id: string): Promise<Session> {
     const session = await this.prisma.session.findUnique({ where: { id } });
-    if (!session) throw new NotFoundException("Sessão não encontrada");
+    if (!session) throw new NotFoundException('Sessão não encontrada');
     return session;
   }
 
@@ -61,7 +61,7 @@ export class SessionsService {
     // D10: escrita restrita ao dono, além do @Roles('ORGANIZER') do controller.
     if (session.organizerId !== organizerId) {
       throw new ForbiddenException(
-        "Você não tem permissão para editar esta sessão",
+        'Você não tem permissão para editar esta sessão',
       );
     }
 

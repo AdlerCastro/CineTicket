@@ -1,21 +1,21 @@
-import { INestApplication } from "@nestjs/common";
-import request from "supertest";
-import { PrismaService } from "@/prisma/prisma.service";
-import { createTestApp } from "./support/test-app";
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { PrismaService } from '@/prisma/prisma.service';
+import { createTestApp } from './support/test-app';
 import {
   ORGANIZER_EMAIL,
   createDisposableCustomer,
   createDisposableMovie,
   createDisposableSession,
   findSeedUser,
-} from "./support/fixtures";
+} from './support/fixtures';
 
 // Regra não-negociável (project-rules.md §4 / CLAUDE.md #1): duas requisições
 // concorrentes para o mesmo assento nunca podem, as duas, resultar em
 // reserva ativa. Mentalidade adversarial — tenta genuinamente derrubar a
 // constraint UNIQUE parcial + transação, não apenas confirmar o caminho
 // feliz.
-describe("Concorrência de assento (POST /reservations)", () => {
+describe('Concorrência de assento (POST /reservations)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let organizerId: string;
@@ -37,7 +37,7 @@ describe("Concorrência de assento (POST /reservations)", () => {
   });
 
   it.each(Array.from({ length: ROUNDS }, (_, i) => i + 1))(
-    "rodada %i/%i: de %i requisições simultâneas para o mesmo assento, exatamente 1 vence e as demais recebem 409",
+    'rodada %i/%i: de %i requisições simultâneas para o mesmo assento, exatamente 1 vence e as demais recebem 409',
     async (round) => {
       // Sessão + único assento descartáveis, criados direto via Prisma —
       // nunca a sessão/assentos do seed.
@@ -59,8 +59,8 @@ describe("Concorrência de assento (POST /reservations)", () => {
       const responses = await Promise.all(
         racers.map(({ token }) =>
           request(app.getHttpServer())
-            .post("/reservations")
-            .set("Authorization", `Bearer ${token}`)
+            .post('/reservations')
+            .set('Authorization', `Bearer ${token}`)
             .send({ sessionId: session.id, seatId }),
         ),
       );
@@ -71,9 +71,9 @@ describe("Concorrência de assento (POST /reservations)", () => {
 
       // Nenhuma requisição pode quebrar com erro genérico — só 201 (venceu)
       // ou 409 (conflito controlado) são resultados aceitáveis.
-      expect(
-        statuses.every((status) => status === 201 || status === 409),
-      ).toBe(true);
+      expect(statuses.every((status) => status === 201 || status === 409)).toBe(
+        true,
+      );
 
       expect(created).toHaveLength(1);
       expect(conflicts).toHaveLength(RACERS_PER_ROUND - 1);
@@ -87,7 +87,7 @@ describe("Concorrência de assento (POST /reservations)", () => {
       // assento — a garantia real é a constraint, a resposta HTTP é só o
       // reflexo dela.
       const activeReservations = await prisma.reservation.count({
-        where: { seatId, status: { in: ["PENDING", "PAID"] } },
+        where: { seatId, status: { in: ['PENDING', 'PAID'] } },
       });
       expect(activeReservations).toBe(1);
     },

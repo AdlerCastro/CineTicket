@@ -1,6 +1,6 @@
-import { User } from "@prisma/client";
+import { User } from '@prisma/client';
 
-export type AuthenticatedUser = Omit<User, "password" | "refreshTokenHash">;
+export type AuthenticatedUser = Omit<User, 'password' | 'refreshTokenHash'>;
 
 export interface AuthenticateUserRequest {
   email: string;

@@ -1,27 +1,27 @@
-import { randomUUID } from "crypto";
-import jwt from "jsonwebtoken";
-import { Movie, PrismaClient, Session, User, UserRole } from "@prisma/client";
+import { randomUUID } from 'crypto';
+import jwt from 'jsonwebtoken';
+import { Movie, PrismaClient, Session, User, UserRole } from '@prisma/client';
 
 // Credenciais fixas semeadas por src/prisma/seed.ts (rodado no global setup,
 // ver support/global-setup.js) — reaproveitadas só para os 4 usuários fixos,
 // nunca para a sessão/assentos que o seed também cria (ver CLAUDE.md da
 // tarefa: a sessão do seed não deve ser reaproveitada pelos specs de QA).
-export const SEED_PASSWORD = "senha123";
-export const ORGANIZER_EMAIL = "organizador@cineticket.dev";
-export const CUSTOMER1_EMAIL = "cliente1@cineticket.dev";
-export const CUSTOMER2_EMAIL = "cliente2@cineticket.dev";
-export const GATE_EMAIL = "portaria@cineticket.dev";
+export const SEED_PASSWORD = 'senha123';
+export const ORGANIZER_EMAIL = 'organizador@cineticket.dev';
+export const CUSTOMER1_EMAIL = 'cliente1@cineticket.dev';
+export const CUSTOMER2_EMAIL = 'cliente2@cineticket.dev';
+export const GATE_EMAIL = 'portaria@cineticket.dev';
 
 export function signAccessToken(userId: string, role: UserRole): string {
   const secret = process.env.JWT_ACCESS_SECRET;
   if (!secret) {
     throw new Error(
-      "JWT_ACCESS_SECRET não definido no ambiente de teste (ver CI/instruções de execução local).",
+      'JWT_ACCESS_SECRET não definido no ambiente de teste (ver CI/instruções de execução local).',
     );
   }
   // Mesmo formato de payload assinado por AuthService.login — sub/role — para
   // que JwtStrategy.validate() aceite o token como se viesse do /auth/login.
-  return jwt.sign({ sub: userId, role }, secret, { expiresIn: "15m" });
+  return jwt.sign({ sub: userId, role }, secret, { expiresIn: '15m' });
 }
 
 export async function findSeedUser(
@@ -43,7 +43,7 @@ export async function createDisposableCustomer(
   const user = await prisma.user.create({
     data: {
       email: `qa-${label}-${randomUUID()}@cineticket.test`,
-      password: "not-used-token-is-signed-directly",
+      password: 'not-used-token-is-signed-directly',
       name: `QA Customer ${label}`,
       role: UserRole.CUSTOMER,
     },
@@ -57,7 +57,7 @@ export async function createDisposableMovie(
   return prisma.movie.create({
     data: {
       tmdbId: Math.floor(Math.random() * 1_000_000_000) + 1,
-      title: "QA Test Movie",
+      title: 'QA Test Movie',
     },
   });
 }
@@ -72,7 +72,7 @@ export async function createDisposableSession(
     data: {
       movieId: opts.movieId,
       organizerId: opts.organizerId,
-      room: "QA Room",
+      room: 'QA Room',
       startsAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       capacity: seatCount,
       price: 20,
@@ -83,7 +83,7 @@ export async function createDisposableSession(
   const seatIds: string[] = [];
   for (let number = 1; number <= seatCount; number += 1) {
     const seat = await prisma.seat.create({
-      data: { sessionId: session.id, row: "Q", number },
+      data: { sessionId: session.id, row: 'Q', number },
     });
     seatIds.push(seat.id);
   }

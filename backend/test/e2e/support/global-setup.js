@@ -1,5 +1,5 @@
-const { execSync } = require("child_process");
-const path = require("path");
+const { execSync } = require('child_process');
+const path = require('path');
 
 // Roda o src/prisma/seed.ts real (não uma cópia/mock) contra o banco de
 // teste antes da suíte e2e, só para materializar os 4 usuários fixos
@@ -10,16 +10,16 @@ const path = require("path");
 module.exports = async function globalSetup() {
   if (!process.env.DATABASE_URL) {
     throw new Error(
-      "DATABASE_URL não definido. Exporte as variáveis do banco de teste " +
-        "(porta 5435, ver docker-compose.test.yml) antes de rodar test:e2e.",
+      'DATABASE_URL não definido. Exporte as variáveis do banco de teste ' +
+        '(porta 5435, ver docker-compose.test.yml) antes de rodar test:e2e.',
     );
   }
 
-  const backendRoot = path.resolve(__dirname, "..", "..", "..");
+  const backendRoot = path.resolve(__dirname, '..', '..', '..');
 
-  execSync("pnpm exec ts-node src/prisma/seed.ts", {
+  execSync('pnpm exec ts-node src/prisma/seed.ts', {
     cwd: backendRoot,
-    stdio: "inherit",
+    stdio: 'inherit',
     env: process.env,
   });
 };

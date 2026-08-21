@@ -1,8 +1,8 @@
-import { AppConfigService } from "@/config/config.service";
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { HttpService } from "@nestjs/axios";
-import { catchError, firstValueFrom } from "rxjs";
-import { AxiosError } from "axios";
+import { AppConfigService } from '@/config/config.service';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { catchError, firstValueFrom } from 'rxjs';
+import { AxiosError } from 'axios';
 
 export interface TmdbMovieSummary {
   id: number;
@@ -23,7 +23,7 @@ export interface TmdbMovieDetails extends TmdbMovieSummary {
 
 @Injectable()
 export class TmdbService {
-  private readonly baseUrl = "https://api.themoviedb.org/3";
+  private readonly baseUrl = 'https://api.themoviedb.org/3';
 
   constructor(
     private readonly http: HttpService,
@@ -34,7 +34,7 @@ export class TmdbService {
     const { data } = await firstValueFrom(
       this.http
         .get<TmdbSearchResponse>(`${this.baseUrl}/search/movie`, {
-          params: { query, language: "pt-BR" },
+          params: { query, language: 'pt-BR' },
           headers: { Authorization: `Bearer ${this.config.tmdbApiKey}` },
         })
         .pipe(
@@ -52,7 +52,7 @@ export class TmdbService {
     const { data } = await firstValueFrom(
       this.http
         .get<TmdbMovieDetails>(`${this.baseUrl}/movie/${tmdbId}`, {
-          params: { language: "pt-BR" },
+          params: { language: 'pt-BR' },
           headers: { Authorization: `Bearer ${this.config.tmdbApiKey}` },
         })
         .pipe(

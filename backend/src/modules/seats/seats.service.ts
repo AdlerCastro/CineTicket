@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { ReservationStatus } from "@prisma/client";
-import { PrismaService } from "@/prisma/prisma.service";
-import { ReservationsService } from "@/modules/reservations/reservations.service";
-import { SeatMapItem, SeatStatus } from "./dto/seat-map-item.dto";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { ReservationStatus } from '@prisma/client';
+import { PrismaService } from '@/prisma/prisma.service';
+import { ReservationsService } from '@/modules/reservations/reservations.service';
+import { SeatMapItem, SeatStatus } from './dto/seat-map-item.dto';
 
 @Injectable()
 export class SeatsService {
@@ -15,7 +15,7 @@ export class SeatsService {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
     });
-    if (!session) throw new NotFoundException("Sessão não encontrada");
+    if (!session) throw new NotFoundException('Sessão não encontrada');
 
     // D05: sweep lazy antes de ler, senão uma reserva PENDING vencida segue
     // aparecendo como ocupada.
@@ -23,7 +23,7 @@ export class SeatsService {
 
     const seats = await this.prisma.seat.findMany({
       where: { sessionId },
-      orderBy: [{ row: "asc" }, { number: "asc" }],
+      orderBy: [{ row: 'asc' }, { number: 'asc' }],
       include: {
         reservations: {
           where: {
@@ -39,7 +39,7 @@ export class SeatsService {
       id: seat.id,
       row: seat.row,
       number: seat.number,
-      status: (seat.reservations[0]?.status as SeatStatus) ?? "AVAILABLE",
+      status: (seat.reservations[0]?.status as SeatStatus) ?? 'AVAILABLE',
     }));
   }
 }

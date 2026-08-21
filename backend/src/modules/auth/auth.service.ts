@@ -1,10 +1,10 @@
-import { AppConfigService } from "@/config/config.service";
-import { PrismaService } from "@/prisma/prisma.service";
-import { Injectable, UnauthorizedException } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
-import { User } from "@prisma/client";
-import * as bcrypt from "bcrypt";
-import { AuthenticatedUser } from "./dto/login.dto";
+import { AppConfigService } from '@/config/config.service';
+import { PrismaService } from '@/prisma/prisma.service';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { User } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import { AuthenticatedUser } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
@@ -20,18 +20,18 @@ export class AuthService {
     });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
-      throw new UnauthorizedException("Credenciais inválidas");
+      throw new UnauthorizedException('Credenciais inválidas');
     }
 
     const payload = { sub: user.id, role: user.role };
     const accessToken = this.jwtService.sign(payload, {
       secret: this.config.jwtAccessSecret,
-      expiresIn: "15m",
+      expiresIn: '15m',
     });
 
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.config.jwtRefreshSecret,
-      expiresIn: "7d",
+      expiresIn: '7d',
     });
 
     return {

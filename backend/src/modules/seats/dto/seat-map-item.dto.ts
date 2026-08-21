@@ -1,4 +1,4 @@
-export type SeatStatus = "AVAILABLE" | "PENDING" | "PAID";
+export type SeatStatus = 'AVAILABLE' | 'PENDING' | 'PAID';
 
 export interface SeatMapItem {
   id: string;
