@@ -4,7 +4,11 @@
   "testEnvironment": "node",
   "testRegex": "e2e/.*\\.e2e-spec\\.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
+    "^.+\\.ts$": "ts-jest"
   },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/../src/$1"
+  },
+  "globalSetup": "<rootDir>/e2e/support/global-setup.js",
   "passWithNoTests": true
 }
