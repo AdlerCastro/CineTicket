@@ -10,6 +10,7 @@
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
+    "format": "prettier --write .",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

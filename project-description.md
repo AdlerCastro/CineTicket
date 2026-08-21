@@ -3,6 +3,7 @@
 ## O que é
 
 Sistema de venda de ingressos de cinema com três papéis distintos:
+
 - **Organizador** (gerente de cinema): cria sessões a partir de um catálogo de filmes (TMDb), define sala, horário, mapa de assentos e preço.
 - **Cliente**: navega pelas sessões publicadas, reserva um assento num mapa em tempo real, paga de forma simulada, recebe um ingresso com QR assinado e pode compartilhá-lo por link.
 - **Portaria**: valida o ingresso na entrada (leitura de QR via câmera ou digitação manual), com retorno claro de válido / inválido / já utilizado / evento errado.
@@ -21,6 +22,7 @@ Simula o fluxo completo de venda de ingresso de cinema — do catálogo de filme
 ## Por que este escopo
 
 Decisões de escopo documentadas em `.context/decisions-log.md`. Resumo das mais relevantes:
+
 - TMDb em vez de Ticketmaster: menos dados prontos (só metadado de filme), mas permite modelar sessão/sala/assento com mais controle e liberdade de design de dados — trade-off consciente entre "menos integração pronta" e "mais superfície para demonstrar modelagem".
 - Assento único (sem tipos PCD/casal): funcionalidade de tipo de assento sem regra de negócio associada não estava no enunciado e foi cortada deliberadamente para não competir por tempo com o core (mapa de assento, concorrência, WebSocket).
 - Sem internacionalização: custo de implementação não compensava o peso do critério.

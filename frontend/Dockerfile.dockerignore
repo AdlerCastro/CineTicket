@@ -1,0 +1,14 @@
+# Ignore file específico do frontend/Dockerfile (recurso do BuildKit:
+# "<dockerfile>.dockerignore" tem prioridade sobre o .dockerignore da raiz).
+# Necessário porque o contexto de build é a raiz do monorepo inteira — sem
+# isso, backend/ (com seu próprio node_modules/dist) e o histórico do .git
+# seriam enviados ao daemon Docker à toa.
+node_modules
+**/node_modules
+**/.next
+**/dist
+.git
+backend
+.context
+.github
+*.log

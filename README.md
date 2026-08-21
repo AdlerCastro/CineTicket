@@ -21,35 +21,40 @@ Gerenciador de pacote: **pnpm**, com workspaces (`pnpm-workspace.yaml`) registra
 ## Como rodar o projeto
 
 ### Pré-requisitos
+
 - Node.js (versão compatível com Next.js 15 / NestJS 10 — ver `.nvmrc` se presente em cada repo)
 - pnpm
 - Docker + Docker Compose
 
 ### 1. Instalar dependências
+
 ```bash
 pnpm install
 ```
 
 ### 2. Subir o Postgres (dev)
+
 ```bash
 docker compose up -d
 ```
+
 Sobe um Postgres em `localhost:5434` (porta escolhida para não conflitar com uma instância local eventualmente já em uso na 5432/5433).
 
 ### 3. Configurar variáveis de ambiente
 
 Copie `backend/.env.example` para `backend/.env` e preencha:
 
-| Variável | Descrição |
-|---|---|
-| `DATABASE_URL` | Já vem preenchida apontando para o container Docker (`postgresql://cineticket:cineticket@localhost:5434/cineticket_dev`) |
-| `JWT_ACCESS_SECRET` | Secret para token de autenticação de usuário |
-| `JWT_TICKET_SECRET` | Secret **próprio e diferente** do de auth, usado para assinar o QR do ingresso |
-| `TMDB_API_KEY` | Chave de API do TMDb — criar conta gratuita em [themoviedb.org](https://www.themoviedb.org/) → configurações → API, e gerar uma API Key (v3 auth) |
+| Variável            | Descrição                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`      | Já vem preenchida apontando para o container Docker (`postgresql://cineticket:cineticket@localhost:5434/cineticket_dev`)                          |
+| `JWT_ACCESS_SECRET` | Secret para token de autenticação de usuário                                                                                                      |
+| `JWT_TICKET_SECRET` | Secret **próprio e diferente** do de auth, usado para assinar o QR do ingresso                                                                    |
+| `TMDB_API_KEY`      | Chave de API do TMDb — criar conta gratuita em [themoviedb.org](https://www.themoviedb.org/) → configurações → API, e gerar uma API Key (v3 auth) |
 
 Repita o processo para `frontend/.env.example` → `frontend/.env` quando o arquivo existir (variáveis de URL da API e do WebSocket).
 
 ### 4. Rodar migrations e popular dados de teste
+
 ```bash
 cd backend
 npx prisma migrate dev
@@ -57,6 +62,7 @@ pnpm exec ts-node src/prisma/seed.ts
 ```
 
 O seed popula:
+
 - 1 usuário Organizador
 - 2 usuários Cliente
 - 1 usuário de Portaria
@@ -65,6 +71,7 @@ O seed popula:
 _Credenciais dos usuários semeados: ver `backend/README.md` (gerado junto com o seed, não versiona senha em texto plano neste README raiz)._
 
 ### 5. Rodar em desenvolvimento
+
 ```bash
 # terminal 1
 cd backend && pnpm dev
@@ -96,11 +103,11 @@ Este projeto foi conduzido com um Arquiteto (Claude, via Claude.ai) orquestrando
 
 ## Papéis de usuário (seed)
 
-| Papel | O que faz |
-|---|---|
-| Organizador | Cria e gerencia sessões a partir do catálogo TMDb |
-| Cliente | Navega, reserva assento, paga (simulado), recebe ingresso |
-| Portaria | Valida ingresso na entrada (câmera ou código manual) |
+| Papel       | O que faz                                                 |
+| ----------- | --------------------------------------------------------- |
+| Organizador | Cria e gerencia sessões a partir do catálogo TMDb         |
+| Cliente     | Navega, reserva assento, paga (simulado), recebe ingresso |
+| Portaria    | Valida ingresso na entrada (câmera ou código manual)      |
 
 ## Testes
 

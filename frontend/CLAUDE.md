@@ -14,13 +14,24 @@ Next.js (App Router) + TypeScript + TailwindCSS + Shadcn UI + React Hook Form + 
 
 ```
 frontend/src/app/{(public),(customer),(organizer),(gate)}/
-frontend/src/components/{ui,features}/
+frontend/src/components/{ui,molecules,organisms,templates}/
 frontend/src/hooks/
+frontend/src/constants/
+frontend/src/enums/
+frontend/src/types/
 frontend/src/lib/
 frontend/src/styles/
 ```
 
-`components/ui/` = componentes Shadcn (tema customizado). `components/features/` = componentes específicos de domínio (`SeatMap`, `TicketQrCode`, etc.) — nunca misturar os dois.
+Atomic Design de 4 níveis, adaptado à convenção de tooling do Shadcn:
+
+- `components/ui/` = componentes Shadcn puros (tema customizado), sem lógica de negócio. Cumpre o papel de "atoms" — não existe pasta `atoms/` separada, seria redundante com `ui/`. É o destino nativo do CLI do Shadcn (`npx shadcn add`), por isso o nome não muda.
+- `components/molecules/` = combinação pequena de itens de `ui/` com propósito único (ex: `SearchBar`).
+- `components/organisms/` = seção completa e independente (`SeatMap`, `SessionCard`, `TicketQrDisplay`, `NavHeader`).
+- `components/templates/` = esqueleto de layout de página, sem dado real.
+- `app/` (rotas) = equivalente a "pages" do Atomic Design, injeta dado nos templates.
+
+Nunca misturar componente de `ui/` (puro, sem lógica de domínio) com componente de `organisms/` (composição com lógica de domínio) na mesma pasta.
 
 ## Convenções deste repositório
 

@@ -45,7 +45,7 @@ TanStack Query cobre dado de servidor; estado client-side puro (seleção de ass
 Vercel serverless não sustenta WebSocket persistente — por isso backend vai para Railway, que suporta processo long-running.
 
 **D14 — Internacionalização descartada**
-Custo de implementação (i18n completo) não compensava o peso do critério  frente ao tempo que tiraria de Funcionalidades . Dark mode mantido — barato, Tailwind/Shadcn já suportam nativamente.
+Custo de implementação (i18n completo) não compensava o retorno frente ao tempo que tiraria de funcionalidades centrais do escopo. Dark mode mantido — barato, Tailwind/Shadcn já suportam nativamente.
 
 **D15 — Tema Shadcn customizado obrigatório**
 Shadcn com tema default é o visual mais reconhecível de "app gerado por IA" — em tensão direta com o critério "identidade própria, sem cara genérica". Tema Tailwind customizado desde a config inicial, não ajuste cosmético depois.
@@ -81,3 +81,32 @@ Uma sessão em `backend/`, outra em `frontend/`, nunca uma sessão só alternand
 
 **D26 — Setup de `pnpm-workspace.yaml` + `package.json` de raiz feito em sessão de raiz, não pelo Backend Agent**
 Ao iniciar Sprint 1, Backend Agent identificou corretamente que `pnpm --filter backend build` (critério de pronto da própria tarefa) depende de workspace root inexistente, e escalou o conflito em vez de criar o arquivo sozinho (comportamento correto conforme CLAUDE.md). Resolução: workspace root é fundação sem dono único (mesma categoria de `packages/shared`/`docker-compose.yml` já coberta por D25) — criado manualmente pelo usuário em sessão de raiz, antes de o Backend Agent retomar a tarefa original sem alteração de escopo.
+
+**D27 — Esqueleto de `package.json`/`tsconfig.json` de todos os workspaces (backend, frontend, packages/shared) consolidado numa única tarefa de raiz**
+Segunda escalada do Backend Agent (mesmo padrão de D26, agora para `packages/shared/package.json`) revelou que resolver bloqueio de infraestrutura um de cada vez é reativo — o Frontend Agent bateria no mesmo problema ao iniciar. Esqueleto puro (sem conteúdo de domínio) de todos os `package.json` é criado de uma vez em sessão de raiz; conteúdo real (schemas, módulos, rotas) permanece com o agente dono de cada repo.
+
+**D28 — Postgres de dev roda em container Docker (porta 5434), não no Postgres local da máquina (porta 5433)**
+Backend Agent, ao precisar rodar migration+seed, encontrou um cluster Postgres já rodando localmente e perguntou por credenciais dele. Rejeitado: usar banco do host contradiz a decisão já travada de Docker Compose dev/test separados. Primeira tarefa do DevOps Agent (`docker-compose.yml` dev) puxada para frente, criada em sessão de raiz, para destravar o Backend Agent sem violar a stack decidida. `docker-compose.test.yml` permanece como tarefa futura, não bloqueia Sprint 1.
+
+**D29 — Portas fixas: backend em 3333, frontend em 3000**
+Frontend mantém a porta padrão do Next.js (3000, sem necessidade de configuração extra). Backend movido do padrão do Nest (3000, colidiria com o frontend) para 3333. Deve ser refletido em `backend/.env.example` (`PORT=3333`), configuração de CORS do backend (origem permitida `http://localhost:3000`), e qualquer client de API no frontend apontando para `http://localhost:3333`.
+
+**D30 — TypeScript e Prisma travados em 5.9 / 6.19, sem upgrade para TS 7 / Prisma 7**
+`typescript-eslint` e `ts-jest` ainda não suportam TS 7 no momento da checagem; Prisma 7 quebraria a configuração atual de `package.json#prisma`. Nenhum agente deve atualizar essas dependências por iniciativa própria — revisão futura só se algo bloquear e passar pelo Arquiteto.
+
+**D31 — Estrutura de componentes do frontend: `ui/` substitui `atoms/`, Atomic Design vira 4 níveis**
+Frontend Agent escalou conflito real entre `frontend/CLAUDE.md` (que ainda descrevia `components/{ui,features}`, versão pré-D18) e `project-rules.md`/D18 (Atomic Design de 5 níveis com Shadcn dentro de `atoms/`). Resolução: `components/ui/` mantido como destino nativo do CLI do Shadcn (evita fricção em todo `npx shadcn add` futuro) e cumpre o papel de "atoms" — nenhuma pasta `atoms/` separada é criada, seria redundante. Hierarquia final: `ui/` → `molecules/` → `organisms/` → `templates/` → `app/` (rotas). `project-rules.md` e `frontend/CLAUDE.md` atualizados para refletir isso.
+
+**D32 — Navegação e seleção de assento abertas a visitante; login exigido só na confirmação/pagamento**
+Usuário propôs inicialmente gatear a seleção de assento atrás de login (junto com perfil, compra e acesso de organizador). Testado e ajustado: gatear a seleção, não só a compra, adiciona fricção exatamente no momento de maior engajamento (a pessoa escolhendo o lugar), contradizendo o próprio objetivo de fluidez. Adotado **Desenho B**: seleção de assento é só estado local no frontend (`useState`, sem Zustand — já coberto por §7), nenhuma `Reservation` é criada no banco até o momento de confirmar. Só na confirmação: (1) checa autenticação, redireciona para login/cadastro se necessário; (2) autenticado, cria a `Reservation` real (`PENDING`, `customerId` preenchido, timer de 5min), protegida pela constraint UNIQUE + transação já definida (regra central do projeto).
+
+Desenho alternativo descartado (**Desenho A** — reserva anônima com `guestToken`, `customerId` nullable, "reivindicada" no login): exigiria migration adicional, lógica nova de "claim" e mais caminhos de erro (token expirado/inválido/já reivindicado), sem necessidade clara no escopo do projeto. Desenho B reaproveita 100% da proteção de concorrência já construída, sem mudança de schema — nenhum campo `guestToken` existe, `customerId` permanece obrigatório em `Reservation`.
+
+**D33 — Secrets dummy no CI (Sprint 1), migração para GitHub Secrets reais é pendência do Sprint 2**
+DevOps Agent usou valores dummy inline no workflow (`ci-test-secret-...`) para satisfazer a validação de env (Zod) sem precisar de credencial real — correto para o Sprint 1, que não chama TMDb de verdade nem valida assinatura JWT contra produção. Quando o Sprint 2 trouxer teste de integração real com TMDb (ou qualquer teste que dependa de resposta real da API), os secrets dummy precisam ser substituídos por GitHub Secrets de verdade — senão o CI passa "verde" testando contra algo que não reflete o comportamento real.
+
+**D34 — Contexto de build dos Dockerfiles é a raiz do monorepo (`context: .`), não a pasta de cada serviço**
+Confirmado por Backend Agent e Frontend Agent, independentemente: ambos dependem de `@cineticket/shared` via workspace, então o build precisa enxergar a raiz. Implicação registrada para quem for integrar `docker-compose.yml`/Railway: os dois serviços usam `context: .` + `dockerfile: backend/Dockerfile` (ou `frontend/Dockerfile`), nunca `context: ./backend`.
+
+**D35 — Retry com backoff limitado na conexão inicial do Prisma, para evitar crash-loop de deploy**
+Backend Agent identificou que `PrismaService.onModuleInit()` conecta de forma síncrona antes de `app.listen()` — sem banco disponível, o processo crasha (não trava "logando a porta", como o critério de pronto original assumia). Risco real para deploy no Railway: se o Postgres não estiver pronto exatamente quando o container backend sobe, vira crash-loop, arriscando o critério de deploy avaliado. Decisão: adicionar retry com backoff limitado (poucas tentativas, espera crescente) só na conexão inicial do Prisma — mudança pequena e local, não uma reescrita de arquitetura de conexão. Reescrever para arquitetura mais robusta (circuit breaker, health check endpoint dedicado, etc.) seria over-engineering para o prazo do projeto.
