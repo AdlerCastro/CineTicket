@@ -64,6 +64,10 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - `.github/workflows/ci.yml`: dispara em PR para `develop`/`main`. Jobs `backend` (lint → sobe compose de teste → migration → test/test:e2e → build) e `frontend` (lint → build), paralelos.
 - Validado: `actionlint` 0 erros; todos os comandos do pipeline reproduzidos manualmente com sucesso. Disparo real dentro do GitHub Actions ainda não testado (`act` indisponível) — risco residual baixo.
 
+**DevOps — correção pós-Sprint 2 (`prisma generate` faltando antes do lint):**
+
+- Execução real do CI no GitHub Actions expôs falha não reproduzida na validação estática/manual anterior: `eslint-plugin @typescript-eslint` (type-aware) falhava no job `backend` com erros "Unsafe ... on a type that cannot be resolved", porque o client do Prisma nunca era gerado no runner antes do step de `Lint`. Corrigido adicionando step `Generate Prisma client` (`pnpm --filter backend exec prisma generate`) logo após `Install dependencies` e antes de `Lint`, dentro do mesmo job `backend` — client gerado persiste no filesystem do runner para os steps seguintes (migrations/testes/build), sem necessidade de repetir o step. Job `frontend` não alterado (não usa Prisma).
+
 **Backend — Sprint 2 (auth/movies revisados + sessions/seats/reservations novos):**
 
 Revisão de `auth/`/`movies/` (escritos manualmente pelo usuário antes desta sessão, não presumidos corretos). Bugs reais corrigidos, validados rodando a aplicação de ponta a ponta:
@@ -144,7 +148,7 @@ Nenhum bug de concorrência/expiração foi encontrado — o código do Sprint 2
 1. **WebSocket** — sem fallback implementado; decisão de queda para polling no dia 5, se necessário, é do Arquiteto.
 2. ~~Concorrência de assento sem teste automatizado~~ — **resolvido**: `backend/test/e2e/reservations-concurrency.e2e-spec.ts` cobre isso contra o banco de teste real, determinístico em múltiplas execuções locais (ver seção "QA — Sprint 2"). Falta só confirmar que passa dentro do GitHub Actions de verdade (ver risco #4, já existente).
 3. **Deploy Railway com WebSocket** — não validado se o plano gratuito sustenta conexão persistente sem interrupção.
-4. **CI nunca rodou dentro do GitHub Actions de verdade** (só validação estática + reprodução manual) — confirmar no primeiro PR real.
+4. ~~CI nunca rodou dentro do GitHub Actions de verdade~~ — **parcialmente resolvido**: rodou de verdade e encontrou um problema real (abaixo), já corrigido. Segue aberto só quanto a confirmar reprodução completa e estável do pipeline em um próximo PR.
 5. **Boot do backend crasha, não trava, sem Postgres acessível** — sem D35 implementada, risco de crash-loop no Railway. Prioridade antes do Sprint 5.
 
 ## Decisões pendentes de revisão futura
