@@ -21,9 +21,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "paths": {
-      "@/*": ["src/*"],
-      "@cineticket/shared": ["../packages/shared/src/index.ts"],
-      "@cineticket/shared/*": ["../packages/shared/src/*"]
+      "@/*": ["src/*"]
     }
   }
 }
