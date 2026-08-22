@@ -2,17 +2,17 @@
 
 > Atualizado ao fim de cada sprint (ou tarefa relevante) pelo agente que a executou. Fonte que qualquer agente lê antes de começar algo novo — se este arquivo estiver desatualizado, a tarefa seguinte corre o risco de trabalhar sobre premissa errada.
 
-**Última atualização:** 21/08 — Arquiteto: Sprint 2 formalmente fechado (D38) — PR `feature/sprint-2 → develop` mergeado, lint/decisions-log/CI real confirmados pelo usuário. Sprint 3 iniciado imediatamente com prioridade máxima no WebSocket Gateway (D39), dado o marco D08 (dia 5) cair amanhã, 22/08.
+**Última atualização:** 21/08 — Backend Agent: WebSocket Gateway (`gateway/`) implementado e validado (Sprint 3, D39/D40) — room por `sessionId`, recusa de subscribe com mensagem genérica em sessão inexistente/`published:false`, emissão de `seat:update` na criação e na expiração lazy de reserva. Testes e2e novos passando, validação manual contra o Postgres de dev com 2 conexões WS reais confirmou latência de 15–30ms ponta a ponta. Ver seção "Backend — Sprint 3" abaixo para detalhes.
 
 ## Fase atual
 
-Sprint 2 (Core Backend) **encerrado**. Sprint 3 (Core Frontend + Realtime) **iniciando agora**, com o Backend Agent atacando o WebSocket Gateway antes de qualquer tarefa de frontend adicional — ver D39.
+Sprint 2 (Core Backend) **encerrado**. Sprint 3 (Core Frontend + Realtime): WebSocket Gateway do backend **concluído** (D39/D40) — próximo passo é o Frontend consumir a API real de sessions/seats e integrar o mapa de assentos ao Gateway.
 
 **Sprint 1 completo nas quatro frentes:** Backend (schema/migration/seed/config/9 módulos/schemas Zod compartilhados), Frontend (Next.js, tema customizado, dark mode, TanStack Query, esqueleto das 4 rotas de grupo), DevOps (`docker-compose.test.yml` + CI no GitHub Actions), mais tarefas avulsas pós-Sprint 1: `backend/Dockerfile` e `frontend/Dockerfile` (ambos validados localmente, build+run), integração ESLint+Prettier.
 
 **Sprint 2 (Core Backend) concluído e fechado:** auth+guards revisado e corrigido, integração TMDb, sessões/assentos/reservas com concorrência de assento validada manualmente e por teste e2e automatizado, PR mergeado em `develop` com CI verde confirmado.
 
-**Falta:** WebSocket Gateway (Sprint 3, em andamento agora), Frontend Sprint 2/3 (consumo real da API + realtime), payments/tickets/gate (Sprint 4) — incluindo o teste automatizado de ingresso duplicado, bloqueado até essa rota existir —, integração dos Dockerfiles no `docker-compose.yml`/deploy Railway.
+**Falta:** Frontend Sprint 2/3 (consumo real da API + realtime via WebSocket Gateway, já pronto no backend), payments/tickets/gate (Sprint 4) — incluindo o teste automatizado de ingresso duplicado, bloqueado até essa rota existir —, integração dos Dockerfiles no `docker-compose.yml`/deploy Railway.
 
 ## Funcional
 
@@ -115,6 +115,32 @@ Nenhum bug de concorrência/expiração foi encontrado — o código do Sprint 2
 
 Um problema pré-existente e não relacionado foi encontrado ao rodar `pnpm --filter backend lint` (comando de validação obrigatório): 173 erros de aspas duplas (violando `singleQuote: true` do Prettier) em 28 arquivos de `src/`. **Resolvido e confirmado** — `eslint --fix` aplicado em commit `style` isolado, revalidado limpo (`lint`/`lint:fix` 0 erros), sem regressão em `test`/`test:e2e`/`build`. Confirmado pelo usuário como parte do fechamento do Sprint 2 (D38).
 
+**Backend — Sprint 3 (WebSocket Gateway, D39/D40):**
+
+Módulo `gateway/` implementado com `@nestjs/websockets` + `@nestjs/platform-socket.io` (dependências novas em `backend/package.json`; `socket.io-client` como devDependency só para os testes e2e). `packages/shared` **não foi tocado** — o payload de evento (`SeatUpdatePayload`/`JoinSessionPayload`/etc.) foi definido localmente em `gateway/types/`, conforme CLAUDE.md da raiz (D25): se o Frontend Agent quiser o mesmo contrato tipado via `@cineticket/shared`, é decisão da sessão de raiz, não assumida aqui.
+
+- **`SeatsGateway`** (`gateway/seats.gateway.ts`): evento `join:session` recebe `{ sessionId }`, busca a sessão via `SessionsService.findOne` (reaproveitado — `SessionsModule` passou a exportar `SessionsService`). Sessão inexistente ou `published: false` → mesma mensagem genérica em `join:error` (`"Sessão indisponível para acompanhamento em tempo real."`), sem `join` na room e sem exceção para o organizador dono, exatamente como travado em D40. Sucesso → `client.join('session:{id}')` + ack em `join:ack`.
+- **Emissão de `seat:update` (`{ seatId, status }`)**: dois pontos de disparo, ambos dentro de `ReservationsService` (side-effect, sem alterar regra de negócio existente):
+  - `create()`: após a transação de criação da reserva, emite `status: 'PENDING'` — cobre o caminho feliz de reserva (`201`).
+  - `expireStalePendingForSession()` (sweep lazy já existente, chamado tanto por `ReservationsService.create` quanto por `SeatsService.getSeatMap`): passou a capturar os `seatId` das reservas que expiraram antes do `updateMany` (antes só fazia o update em massa sem saber quais linhas mudaram) e emite `status: 'AVAILABLE'` para cada uma. **Nenhum cron/polling novo foi adicionado** — a expiração só é percebida em tempo real quando algo (uma tentativa de reserva ou uma leitura do mapa) dispara o sweep já existente, igual antes.
+  - `SeatsModule`/`SeatsService` não precisaram de nenhuma mudança — já reaproveitava `expireStalePendingForSession` para a leitura pública do mapa.
+- **CORS do gateway**: `@WebSocketGateway({ cors: ... })` lê `process.env.CORS_ORIGINS` diretamente (mesma env var de `env.schema.ts`), porque as options do decorator são avaliadas na carga do módulo, antes de `AppConfigService` existir como provider injetável — não dá pra usar DI ali. Fallback local espelha o default do schema (`http://localhost:3000`). Nenhum `*` usado (regra não-negociável §6).
+- **Sem guard de autenticação no `join:session`**: consistente com D32 (seleção/visualização de assento é pública, só a criação real de `Reservation` exige login) — decisão de implementação, não travada explicitamente em D40, registrada aqui como ambiguidade resolvida sem escalar.
+
+**Testes e2e novos (`test/e2e/seats-gateway.e2e-spec.ts`):**
+
+- Dois clientes WS reais (via `socket.io-client`) entram na mesma room; cliente A reserva via REST (`POST /reservations`); cliente B recebe `seat:update` com o payload correto, sem qualquer polling. **PASSOU.**
+- Subscribe em sessão inexistente e em sessão `published:false` (`fixtures.ts` ganhou parâmetro opcional `published` em `createDisposableSession`, default `true`, sem quebrar os specs existentes) — ambos recusados com a **mesma** mensagem de erro. **PASSOU.**
+- Suíte completa (`reservation-expiration`, `reservations-concurrency`, `seats-gateway`) roda limpa contra o banco de teste real (porta 5435): 8 passed, 1 skipped (o `ticket-single-use` já bloqueado desde o Sprint 2). `lint`/`build`/`test` (unitário, ainda vazio) também limpos.
+
+**Validação manual contra o Postgres de dev (porta 5434), critério de pronto do marco D08:**
+
+Instância temporária do backend compilado rodada numa porta separada (3390) — sem derrubar nem reiniciar o processo de dev do usuário já rodando na 3333 — usando dados reais semeados/gerados no banco de dev (sessão publicada real, cliente seedado, sessão rascunho criada via `POST /sessions` para o teste de recusa). Dois scripts Node com `socket.io-client` reproduziram os dois critérios de pronto fora do Jest:
+
+- **Latência ponta a ponta** (do envio do `POST /reservations` até o cliente B observador receber `seat:update`), 4 execuções contra assentos distintos: **30ms, 15ms, 16ms, 22ms**. Estável e baixa (ambiente local, sem rede real entre serviços — Railway/produção deve ser revalidado, ver risco #3). **Dado concreto entregue para o marco de amanhã (22/08): sem sinal de instabilidade, WebSocket funcionando de ponta a ponta.**
+- **Recusa de subscribe**: sessão rascunho (`published:false`) real e sessionId inexistente real, ambos recusados com a mensagem idêntica `"Sessão indisponível para acompanhamento em tempo real."`, confirmado fora do ambiente de teste automatizado.
+- Nenhum erro/exceção no log da instância durante conecta/desconecta múltiplos clientes — disconnect não derrubou o processo. Dados de teste (reservas e sessão rascunho criados durante a validação) foram limpos do banco de dev ao final.
+
 ### Ambiguidades resolvidas sem travar a tarefa (Backend, Sprint 2)
 
 1. `GET /sessions` retorna todas as sessões sem filtrar `published` — não foi pedido, vale revisão futura.
@@ -153,19 +179,20 @@ Um problema pré-existente e não relacionado foi encontrado ao rodar `pnpm --fi
 - [x] Sprint 2 — Core Backend: auth+guards revisado, TMDb, sessions/seats/reservations com concorrência validada manualmente.
 - [x] Sprint 2 — QA: teste automatizado e2e de concorrência de assento e de expiração de reserva (determinísticos, banco de teste real). Teste de ingresso duplicado bloqueado por dependência do Sprint 4 (payments/tickets/gate).
 - [x] Sprint 2 — Fechamento formal: lint corrigido, conflito de `decisions-log.md` resolvido, CI real confirmado verde no GitHub Actions, PR mergeado em `develop` (D38).
-- [ ] **Sprint 3 — WebSocket Gateway (backend), EM ANDAMENTO AGORA, prioridade máxima (D39).** Marco dia 5 (22/08) depende deste trabalho existir para ser avaliado com sinal real.
+- [x] Sprint 3 — WebSocket Gateway (backend, D39/D40): room por sessão, recusa com mensagem genérica, emissão em criação/expiração de reserva, testes e2e novos, validação manual com latência de 15–30ms contra o Postgres de dev.
 - [ ] Sprint 3 — Frontend: consumo real da API (sessions/seats) + integração do mapa de assentos em tempo real via WebSocket. Não iniciado além do esqueleto do Sprint 1.
 - [ ] Sprint 4 — Pagamento simulado, ingresso (JWT+QR), portaria.
 - [ ] Sprint 5 — Testes finais, deploy Railway+Vercel, README, seed, revisão final.
-- [ ] Backlog (não bloqueia Sprint 3): D35 (retry com backoff no Prisma), `/auth/login` sem `ZodValidationPipe`, integração dos Dockerfiles no `docker-compose.yml`/deploy Railway.
+- [ ] Backlog (não bloqueia Sprint 3): D35 (retry com backoff no Prisma), `/auth/login` sem `ZodValidationPipe`, integração dos Dockerfiles no `docker-compose.yml`/deploy Railway, D40 (filtro de `published`/dono nos 3 endpoints REST de sessions).
 
 ## Riscos abertos
 
-1. **WebSocket** — implementação começa agora (D39); risco passa a ser "não ficar pronto/estável a tempo do marco de amanhã (dia 5)", não mais "não iniciado". Decisão de queda para polling, se necessário, é do Arquiteto — e só pode ser tomada com sinal real de instabilidade, não por falta de tempo de começar.
+1. ~~WebSocket instável/não pronto a tempo do marco~~ — **sinal real entregue**: Gateway implementado, testado (e2e automatizado + validação manual com 2 conexões reais contra o Postgres de dev) e estável, latência 15–30ms observada localmente. Decisão de manter WebSocket vs. cair para polling (D08) segue sendo do Arquiteto, agora com dado concreto em mãos em vez de escolha às cegas.
 2. ~~Concorrência de assento sem teste automatizado~~ — **resolvido**: `backend/test/e2e/reservations-concurrency.e2e-spec.ts` cobre isso contra o banco de teste real, determinístico em múltiplas execuções, e confirmado passando dentro do GitHub Actions real (D38).
-3. **Deploy Railway com WebSocket** — não validado se o plano gratuito sustenta conexão persistente sem interrupção. Ganha relevância agora que o Gateway está sendo implementado de verdade.
+3. **Deploy Railway com WebSocket** — não validado se o plano gratuito sustenta conexão persistente sem interrupção. Validação feita até agora foi só local (Postgres de dev, sem rede real entre serviços) — continua em aberto até o deploy real (Sprint 5).
 4. ~~CI nunca rodou dentro do GitHub Actions de verdade~~ — **resolvido**: PR `feature/sprint-2 → develop` rodou o pipeline completo no Actions, jobs verdes, confirmado (D38).
 5. **Boot do backend crasha, não trava, sem Postgres acessível** — sem D35 implementada, risco de crash-loop no Railway. Backlog, prioridade antes do Sprint 5 (não bloqueia Sprint 3).
+6. **Sessão rascunho (`published: false`) legível via REST por quem souber o `sessionId`** — D40: o WebSocket Gateway recusa subscribe em sessão não-publicada, mas `GET /sessions`, `GET /sessions/:id` e `GET /sessions/:id/seats` não filtram por `published` nem por dono. Risco prático baixo agora (sem usuário real, ID não exposto em listagem pública), mas é lacuna de autorização real. Backlog, prioridade antes do Sprint 5, mesma categoria de D35.
 
 ## Decisões pendentes de revisão futura
 

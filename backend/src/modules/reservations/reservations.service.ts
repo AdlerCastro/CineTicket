@@ -6,23 +6,45 @@ import {
 import { Prisma, Reservation, ReservationStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RESERVATION_TTL_MINUTES } from '@/constants/reservation.constants';
+import { SeatsGateway } from '@/modules/gateway/seats.gateway';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
 @Injectable()
 export class ReservationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly seatsGateway: SeatsGateway,
+  ) {}
 
   // D05, verificação lazy (ver .context/project-state.md): a constraint
   // UNIQUE parcial só cobre status PENDING/PAID, então uma linha PENDING
   // vencida continua bloqueando o assento até isto rodar.
   async expireStalePendingForSession(sessionId: string): Promise<void> {
-    await this.prisma.reservation.updateMany({
+    const staleReservations = await this.prisma.reservation.findMany({
       where: {
         sessionId,
         status: ReservationStatus.PENDING,
         expiresAt: { lt: new Date() },
       },
+      select: { id: true, seatId: true },
+    });
+
+    if (staleReservations.length === 0) return;
+
+    await this.prisma.reservation.updateMany({
+      where: {
+        id: { in: staleReservations.map((reservation) => reservation.id) },
+      },
       data: { status: ReservationStatus.EXPIRED },
+    });
+
+    // Sprint 3 (D39/D40): sweep lazy já existia — só ganhou o side-effect de
+    // avisar quem está olhando o mapa em tempo real que o assento voltou.
+    staleReservations.forEach((reservation) => {
+      this.seatsGateway.emitSeatUpdate(sessionId, {
+        seatId: reservation.seatId,
+        status: 'AVAILABLE',
+      });
     });
   }
 
@@ -48,7 +70,7 @@ export class ReservationsService {
       // 🔒 project-rules.md §4: quem impede a corrida é a constraint UNIQUE
       // parcial (sessionId, seatId) WHERE status IN ('PENDING','PAID') — a
       // segunda tentativa concorrente falha aqui com P2002.
-      return await this.prisma.$transaction(async (tx) => {
+      const reservation = await this.prisma.$transaction(async (tx) => {
         return tx.reservation.create({
           data: {
             sessionId: dto.sessionId,
@@ -61,6 +83,13 @@ export class ReservationsService {
           },
         });
       });
+
+      this.seatsGateway.emitSeatUpdate(dto.sessionId, {
+        seatId: dto.seatId,
+        status: 'PENDING',
+      });
+
+      return reservation;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
