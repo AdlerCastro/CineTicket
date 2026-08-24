@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserRole } from '@cineticket/shared';
 
-// D52: 1-2 ações do papel logado no header persistente — GATE não ganha
-// ação extra (já tem tudo que precisa na própria tela de portaria).
+// D52/D55: 1 ação do papel logado no header persistente, por papel. GATE
+// ganhou a própria (D55, falha de cobertura de D52 — não existia nenhum
+// caminho de navegação até /check-in fora de digitar a URL direta).
 const ROLE_ACTION: Partial<Record<UserRole, { href: string; label: string }>> =
   {
     CUSTOMER: { href: '/my-tickets', label: 'Meus Ingressos' },
     ORGANIZER: { href: '/dashboard', label: 'Painel' },
+    GATE: { href: '/check-in', label: 'Portaria' },
   };
 
 export function AuthStatus() {
