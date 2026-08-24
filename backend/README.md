@@ -37,6 +37,16 @@ pnpm --filter backend dev
 | `test`     | `pnpm --filter backend test`     | Testes unitários (Jest, `test/unit/`) |
 | `test:e2e` | `pnpm --filter backend test:e2e` | Testes e2e (Jest, `test/e2e/`)        |
 
+### Seed dentro do container (deploy)
+
+`pnpm --filter backend seed` usa `ts-node` — funciona no host e no CI, mas não dentro da imagem `node:20-alpine` do `Dockerfile` (Node dessa imagem trata `.ts` como módulo ESM antes do `ts-node` conseguir registrar o loader, `ERR_UNKNOWN_FILE_EXTENSION`). Dentro de um container já rodando a imagem de produção, rode diretamente com `node` (a imagem final não tem `pnpm`/corepack, só o runtime Node) a partir de `/workspace`:
+
+```bash
+docker exec <container> node backend/dist/prisma/seed.js
+```
+
+`backend/dist/prisma/seed.js` já existe na imagem porque `nest build` compila todo `src/`, `seed.ts` incluído — sem passo extra no `Dockerfile`. O script `seed:prod` (`node dist/prisma/seed.js`, no `package.json`) documenta o mesmo comando para quem rodar de dentro de `backend/` (ex.: local, com `pnpm --filter backend build` já executado) — dentro do container final, use o `docker exec` acima, já que `pnpm` não está disponível lá.
+
 ## Usuários semeados (dev)
 
 `pnpm --filter backend seed` popula 4 usuários de teste, todos com a mesma senha:
