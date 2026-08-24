@@ -1,30 +1,32 @@
 # CineTicket
 
-Plataforma de venda de ingressos de cinema — projeto de avaliação técnica, desenvolvido em 7 dias com uso assistido de IA (metodologia documentada em `agent-ecosystem.md`).
+Plataforma de venda de ingressos de cinema com três papéis — **Organizador** (cria sessões a partir de um catálogo de filmes real, via TMDb), **Cliente** (reserva assento num mapa em tempo real, paga de forma simulada e recebe um ingresso com QR assinado) e **Portaria** (valida o ingresso na entrada, por câmera ou digitação manual, com retorno claro de válido/inválido/já utilizado/evento errado).
 
-Fluxo: Organizador cria sessões a partir de um catálogo de filmes (TMDb) → Cliente reserva assento num mapa em tempo real, paga de forma simulada, recebe ingresso com QR → Portaria valida o ingresso na entrada.
+Este é um projeto de avaliação técnica (processo seletivo), desenvolvido em 7 dias com uso assistido de IA — metodologia de Arquiteto + agentes especializados documentada em [`agent-ecosystem.md`](./agent-ecosystem.md). A regra central de negócio, válida sob concorrência real (múltiplos clientes disputando o mesmo assento, múltiplas validações do mesmo ingresso), é: **o mesmo assento nunca é vendido duas vezes, o mesmo ingresso nunca é validado duas vezes**. Contexto completo, incluindo por que o escopo é o que é, em [`project-description.md`](./project-description.md).
 
-## Estrutura do monorepo
+## Stack e arquitetura
+
+Monorepo **pnpm** (`pnpm-workspace.yaml`), três workspaces:
 
 ```
-cineticket/
-├── backend/          NestJS + Prisma + PostgreSQL — API, auth, WebSocket, lógica de negócio
-├── frontend/          Next.js + Tailwind + Shadcn UI — interface
-├── packages/shared/   Schemas Zod compartilhados entre backend e frontend
-├── .context/          Artefatos de processo (decisões, estado, log de execução por sprint)
-├── docker-compose.yml Postgres containerizado (dev)
-└── *.md (raiz)        Documentação de processo — ver seção abaixo
+backend/          NestJS + TypeScript + PostgreSQL (Prisma) — API REST + WebSocket
+frontend/          Next.js (App Router) + TailwindCSS + Shadcn UI — interface
+packages/shared/   Schemas Zod compartilhados (validação de formulário no frontend = DTO no backend)
 ```
 
-Gerenciador de pacote: **pnpm**, com workspaces (`pnpm-workspace.yaml`) registrando `backend`, `frontend` e `packages/*`.
+Decisões de arquitetura relevantes (histórico completo e justificativa em [`.context/decisions-log.md`](./.context/decisions-log.md)):
 
-## Como rodar o projeto
+- **WebSocket para o mapa de assentos em tempo real, não polling** (D08) — escolha de maior risco técnico assumida conscientemente, com marco de decisão fixado para eventual fallback. Validado sob carga local (12 clientes) e em produção real no Railway antes de ser fechada como solução definitiva, sem fallback acionado (D41).
+- **TMDb como catálogo de filme**, em vez de uma API de evento pronta — modelagem própria de sessão/sala/assento (D01).
+- **Ingresso = JWT assinado (HS256) com secret próprio**, diferente do secret de autenticação de usuário, carregando `ticketId` no payload — QR é só a representação visual desse JWT, gerado no cliente (D03).
+- **Reserva expira em 5 minutos em `PENDING`**, protegida por constraint `UNIQUE` parcial + transação no Postgres — não por "banco rápido" (D05/D06).
+- **Deploy split**: backend + Postgres no Railway (processo long-running, necessário para WebSocket persistente), frontend na Vercel (D13).
 
-### Pré-requisitos
+## Como rodar localmente
 
-- Node.js (versão compatível com Next.js 15 / NestJS 10 — ver `.nvmrc` se presente em cada repo)
-- pnpm
-- Docker + Docker Compose
+Testado do zero nesta sessão (ambiente resetado — containers recriados, processos de dev reiniciados) antes de documentar; todos os comandos abaixo foram executados e confirmados, não copiados de memória.
+
+**Pré-requisitos:** Node.js 20+, pnpm, Docker + Docker Compose.
 
 ### 1. Instalar dependências
 
@@ -32,91 +34,107 @@ Gerenciador de pacote: **pnpm**, com workspaces (`pnpm-workspace.yaml`) registra
 pnpm install
 ```
 
-### 2. Subir o Postgres (dev)
+### 2. Subir o Postgres de desenvolvimento
 
 ```bash
 docker compose up -d
 ```
 
-Sobe um Postgres em `localhost:5434` (porta escolhida para não conflitar com uma instância local eventualmente já em uso na 5432/5433).
+Sobe um Postgres 16 em `localhost:5434` (`cineticket-postgres-dev`) — porta não-padrão para não colidir com um Postgres local já em uso na máquina.
 
 ### 3. Configurar variáveis de ambiente
 
-Copie `backend/.env.example` para `backend/.env` e preencha:
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
 
-| Variável            | Descrição                                                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`      | Já vem preenchida apontando para o container Docker (`postgresql://cineticket:cineticket@localhost:5434/cineticket_dev`)                          |
-| `JWT_ACCESS_SECRET` | Secret para token de autenticação de usuário                                                                                                      |
-| `JWT_TICKET_SECRET` | Secret **próprio e diferente** do de auth, usado para assinar o QR do ingresso                                                                    |
-| `TMDB_API_KEY`      | Chave de API do TMDb — criar conta gratuita em [themoviedb.org](https://www.themoviedb.org/) → configurações → API, e gerar uma API Key (v3 auth) |
-
-Repita o processo para `frontend/.env.example` → `frontend/.env` quando o arquivo existir (variáveis de URL da API e do WebSocket).
+`backend/.env.example` já vem com `DATABASE_URL` apontando para o container do passo 2. Preencha `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_TICKET_SECRET` (valores livres em dev, nunca o mesmo valor entre os três) e `TMDB_API_KEY` (conta gratuita em [themoviedb.org](https://www.themoviedb.org/settings/api)). `frontend/.env.example` já aponta para `http://localhost:3333` (API) e `ws://localhost:3333` (WebSocket) — não precisa de chave própria.
 
 ### 4. Rodar migrations e popular dados de teste
 
 ```bash
-cd backend
-npx prisma migrate dev
-pnpm exec ts-node src/prisma/seed.ts
+pnpm --filter backend prisma:migrate
+pnpm --filter backend seed
 ```
 
-O seed popula:
+O seed é idempotente — popular 1 organizador, 2 clientes, 1 usuário de portaria, e 1 sessão publicada com 10 assentos.
 
-- 1 usuário Organizador
-- 2 usuários Cliente
-- 1 usuário de Portaria
-- 1 sessão de cinema publicada, com assentos disponíveis
-
-_Credenciais dos usuários semeados: ver `backend/README.md` (gerado junto com o seed, não versiona senha em texto plano neste README raiz)._
-
-### 5. Rodar em desenvolvimento
+### 5. Rodar backend e frontend
 
 ```bash
 # terminal 1
-cd backend && pnpm dev
+pnpm --filter backend dev     # http://localhost:3333 (Swagger em /docs)
 
 # terminal 2
-cd frontend && pnpm dev
+pnpm --filter frontend dev    # http://localhost:3000
+```
+
+Confirmado nesta sessão: `GET http://localhost:3333/docs` → `200`; `GET http://localhost:3000/` e `/dashboard` → `200`.
+
+## Credenciais de teste
+
+4 usuários fixos (organizador, 2 clientes, portaria), todos com a mesma senha — lista completa em **[`backend/README.md`](./backend/README.md#usuários-semeados-dev)** (não duplicada aqui para não ter duas fontes de verdade divergindo com o tempo).
+
+## Como rodar os testes
+
+**Backend:**
+
+```bash
+pnpm --filter backend lint
+pnpm --filter backend test       # unitários — hoje só há suíte e2e, roda 0 testes sem erro
+pnpm --filter backend test:e2e   # concorrência de assento, expiração, pagamento, ingresso duplicado, jornadas completas
+```
+
+`test:e2e` precisa do banco de teste isolado (porta 5435, sem persistência) no ar **e** de `DATABASE_URL` exportado explicitamente apontando pra ele antes do comando — a suíte não lê `backend/.env` para isso, por desenho (evita rodar e2e contra o banco de dev por engano):
+
+```bash
+docker compose -f docker-compose.test.yml up -d --wait
+export DATABASE_URL="postgresql://cineticket:cineticket@localhost:5435/cineticket_test"
+pnpm --filter backend exec prisma migrate deploy
+pnpm --filter backend test:e2e
+```
+
+Confirmado nesta sessão: 12 suítes / 40 testes, todos passando (~13s).
+
+**Frontend:**
+
+```bash
+pnpm --filter frontend lint
+pnpm --filter frontend build
 ```
 
 ## Deploy
 
 - Backend + PostgreSQL: Railway.
 - Frontend: Vercel.
-- Links de produção: _preencher ao final do Sprint 5._
+- URLs de produção: _a preencher — ver `.context/project-state.md` para o histórico do smoke-test de validação em produção (D41) enquanto o deploy final não é linkado aqui._
 
-## Documentação da API
+## Estrutura de pastas (resumo)
 
-Swagger/OpenAPI disponível em `/api/docs` (ou equivalente) quando o backend está rodando. _URL exata a confirmar conforme configuração final do backend._
+```
+cineticket/
+├── backend/           NestJS — módulo por domínio (auth, movies, sessions, seats, reservations, payments, tickets, gateway)
+├── frontend/           Next.js — app/{(public),(customer),(organizer),(gate)}, components/{ui,molecules,organisms,templates}
+├── packages/shared/    Schemas Zod usados por RHF+Zod no frontend e ZodValidationPipe no backend
+├── .context/            decisions-log.md, project-state.md — histórico e estado do projeto (ver abaixo)
+├── docker-compose.yml         Postgres de dev (porta 5434)
+├── docker-compose.test.yml    Postgres de teste, sem persistência (porta 5435)
+└── .github/workflows/ci.yml   CI: lint + test + test:e2e (backend), lint + build (frontend)
+```
+
+Estrutura obrigatória e convenções de cada repositório estão documentadas em `backend/CLAUDE.md` e `frontend/CLAUDE.md`.
 
 ## Sobre o processo de desenvolvimento (uso de IA)
 
-Este projeto foi conduzido com um Arquiteto (Claude, via Claude.ai) orquestrando agentes de execução (Claude Code CLI) especializados por área — Backend, Frontend, QA/Testes, DevOps/Infra. Toda decisão de escopo, arquitetura e trade-off está documentada e versionada:
+Este projeto foi conduzido com um Arquiteto (Claude, via Claude.ai) orquestrando agentes de execução (Claude Code CLI) especializados por área — Backend, Frontend, QA/Testes, DevOps/Infra — cada um em sessão própria, com fronteira de responsabilidade reforçada por `CLAUDE.md` em cada repositório. Toda decisão de escopo, arquitetura e trade-off está documentada e versionada:
 
-- **`project-description.md`** — o que é o projeto, para quem, estado atual.
-- **`project-rules.md`** — regras de código, nomenclatura, estrutura de pastas, segurança, banco, git.
-- **`agent-ecosystem.md`** — papéis dos agentes, fluxo de sprint, sincronização de contexto.
-- **`.context/decisions-log.md`** — histórico cronológico de toda decisão tomada, com justificativa.
-- **`.context/project-state.md`** — estado funcional atual do projeto.
-- **`.context/sprint-log/`** — um arquivo por sprint, com o prompt exato dado a cada agente, o resultado, e o que foi feito manualmente pelo desenvolvedor.
-
-## Papéis de usuário (seed)
-
-| Papel       | O que faz                                                 |
-| ----------- | --------------------------------------------------------- |
-| Organizador | Cria e gerencia sessões a partir do catálogo TMDb         |
-| Cliente     | Navega, reserva assento, paga (simulado), recebe ingresso |
-| Portaria    | Valida ingresso na entrada (câmera ou código manual)      |
-
-## Testes
-
-```bash
-cd backend
-pnpm test        # unitários
-pnpm test:e2e    # inclui testes de concorrência de assento, ingresso duplicado, expiração de reserva
-```
+- [`project-description.md`](./project-description.md) — o que é o projeto, para quem, por que este escopo.
+- [`project-rules.md`](./project-rules.md) — regras de código, nomenclatura, estrutura de pastas, segurança, banco, git.
+- [`agent-ecosystem.md`](./agent-ecosystem.md) — papéis dos agentes, fluxo de sprint, sincronização de contexto.
+- [`.context/decisions-log.md`](./.context/decisions-log.md) — histórico cronológico de toda decisão tomada, com justificativa (dono exclusivo: sessão de raiz/Arquiteto).
+- [`.context/project-state.md`](./.context/project-state.md) — estado funcional atual, o que foi feito, achados, riscos abertos.
 
 ## Status do projeto
 
-Ver `.context/project-state.md` para o estado atualizado (o que está funcional, pendente, riscos abertos).
+Ver [`.context/project-state.md`](./.context/project-state.md) para o estado atualizado (funcional, pendente, riscos abertos) — é o registro vivo, atualizado ao fim de cada sprint/tarefa relevante.
