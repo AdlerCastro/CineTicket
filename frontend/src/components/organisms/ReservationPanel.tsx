@@ -47,6 +47,10 @@ interface ReservationPanelProps {
   seats: SeatMapItem[];
   selectedSeatId: string | null;
   reservation: Reservation | null;
+  // D54: true enquanto GET /reservations/mine/active ainda não respondeu —
+  // evita mostrar "escolha um assento" por engano antes de saber se já existe
+  // uma Reservation PENDING pra reidratar (ver sessions/[id]/page.tsx).
+  isCheckingActiveReservation?: boolean;
   onReservationChange: (reservation: Reservation) => void;
   onClearSelection: () => void;
   onReset: () => void;
@@ -57,6 +61,7 @@ export function ReservationPanel({
   seats,
   selectedSeatId,
   reservation,
+  isCheckingActiveReservation,
   onReservationChange,
   onClearSelection,
   onReset,
@@ -172,6 +177,16 @@ export function ReservationPanel({
   });
 
   const selectedSeat = seats.find((seat) => seat.id === selectedSeatId);
+
+  if (!reservation && isCheckingActiveReservation) {
+    return (
+      <div className='rounded-lg border border-border bg-card p-4'>
+        <p className='text-sm text-muted-foreground'>
+          Verificando reserva ativa...
+        </p>
+      </div>
+    );
+  }
 
   if (reservation) {
     const reservedSeat = seats.find((seat) => seat.id === reservation.seatId);

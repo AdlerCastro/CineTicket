@@ -209,4 +209,62 @@ describe('Pagamento simulado (POST /payments)', () => {
     });
     expect(reservationAfter.status).toBe('PENDING');
   });
+
+  // D53: GET /tickets/mine — reaproveita o mesmo fluxo de compra (reserva +
+  // pagamento APPROVE) já exercitado acima para gerar Tickets reais.
+  it('GET /tickets/mine lista só os ingressos do customer autenticado, mais recente primeiro, com isolamento entre customers', async () => {
+    const { session, seatIds } = await createDisposableSession(prisma, {
+      organizerId,
+      movieId,
+      seatCount: 2,
+    });
+    const { token: ownerToken } = await createDisposableCustomer(
+      prisma,
+      'mine-owner',
+    );
+    const { token: strangerToken } = await createDisposableCustomer(
+      prisma,
+      'mine-stranger',
+    );
+
+    // Stranger sem nenhum ingresso: array vazio, não erro.
+    const emptyResponse = await request(app.getHttpServer())
+      .get('/tickets/mine')
+      .set('Authorization', `Bearer ${strangerToken}`);
+    expect(emptyResponse.status).toBe(200);
+    expect(emptyResponse.body).toEqual([]);
+
+    // Owner compra dois ingressos em sequência.
+    const ticketIds: string[] = [];
+    for (const seatId of seatIds) {
+      const reservationResponse = await request(app.getHttpServer())
+        .post('/reservations')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ sessionId: session.id, seatId });
+      const reservationId = reservationResponse.body.id as string;
+
+      const paymentResponse = await request(app.getHttpServer())
+        .post('/payments')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ reservationId, decision: 'APPROVE' });
+      ticketIds.push(paymentResponse.body.ticketId as string);
+    }
+
+    const mineResponse = await request(app.getHttpServer())
+      .get('/tickets/mine')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(mineResponse.status).toBe(200);
+    expect(mineResponse.body).toHaveLength(2);
+    // Mais recente primeiro: o segundo ingresso comprado vem antes do primeiro.
+    expect(mineResponse.body[0].id).toBe(ticketIds[1]);
+    expect(mineResponse.body[1].id).toBe(ticketIds[0]);
+    expect(mineResponse.body[0].session.movie.id).toBeDefined();
+    expect(mineResponse.body[0].seat).toBeDefined();
+
+    // Isolamento: o stranger continua sem ver os ingressos do owner.
+    const strangerStillEmpty = await request(app.getHttpServer())
+      .get('/tickets/mine')
+      .set('Authorization', `Bearer ${strangerToken}`);
+    expect(strangerStillEmpty.body).toEqual([]);
+  });
 });
