@@ -28,6 +28,23 @@ import {
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
 
+  // D53: listagem dos próprios ingressos. Precisa vir ANTES de `:id` na
+  // ordem das rotas — Nest resolve por ordem de declaração, e `:id` casaria
+  // com o literal "mine" como se fosse um id.
+  @Get('mine')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CUSTOMER')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Lista os ingressos do customer autenticado (mais recente primeiro)',
+  })
+  findMine(
+    @CurrentUser() user: AuthenticatedUserRole,
+  ): Promise<TicketDisplayResponse[]> {
+    return this.ticketsService.findAllForCustomer(user.id);
+  }
+
   // Consulta do ingresso pelo dono (D46: QR renderizado client-side a
   // partir do `jwt` retornado aqui — backend nunca gera imagem de QR).
   @Get(':id')

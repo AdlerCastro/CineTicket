@@ -85,6 +85,24 @@ export class TicketsService {
     return this.toDisplayResponse(ticket);
   }
 
+  // D53: listagem dos próprios ingressos (GET /tickets/mine). Mesmo shape de
+  // findByIdForCustomer (reaproveita toDisplayResponse) e mesma cadeia de
+  // ownership via reservation.customerId — só troca findUnique+id por
+  // findMany filtrado. Ordenação por Ticket.createdAt desc (mais recente
+  // primeiro): é a data de emissão do próprio ingresso, mais direta que
+  // Reservation.createdAt (que marca o início da reserva, não a emissão).
+  async findAllForCustomer(
+    customerId: string,
+  ): Promise<TicketDisplayResponse[]> {
+    const tickets = await this.prisma.ticket.findMany({
+      where: { reservation: { customerId } },
+      include: TICKET_WITH_DETAILS_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return tickets.map((ticket) => this.toDisplayResponse(ticket));
+  }
+
   async validate(dto: ValidateTicketDto): Promise<ValidateTicketResponse> {
     // Assinatura validada ANTES de qualquer consulta ao banco (project-rules
     // desta tarefa) — verifyToken lança sem ter tocado o Prisma.
