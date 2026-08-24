@@ -10,13 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { apiClient, ApiError } from '@/lib/api-client';
 
-// NOTA (fechamento da tarefa): não existe POST /auth/register no backend hoje
-// (só /auth/login) — userSchema em packages/shared já modela o payload de
-// cadastro (comentário do próprio schema: "Espelha o CreateUserDto do backend
-// (auth/registro)"), mas o endpoint correspondente nunca foi implementado.
-// Este formulário fica funcional no frontend e reporta erro de forma
-// controlada (ApiError) quando o submit falha — reportado como achado, não
-// contornado aqui (fora do escopo desta sessão mexer em backend/src).
 export default function RegisterPage() {
   return (
     <Suspense fallback={null}>
@@ -54,9 +47,9 @@ function RegisterForm() {
       router.replace(loginHref);
     } catch (error) {
       setServerError(
-        error instanceof ApiError
-          ? 'Cadastro indisponível no momento.'
-          : 'Não foi possível concluir o cadastro.',
+        error instanceof ApiError && error.status === 409
+          ? 'Este e-mail já está cadastrado.'
+          : 'Cadastro indisponível no momento.',
       );
     } finally {
       setIsSubmitting(false);
