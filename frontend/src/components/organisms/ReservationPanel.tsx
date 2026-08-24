@@ -9,6 +9,7 @@ import { apiClient, ApiError } from '@/lib/api-client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCountdown } from '@/hooks/useCountdown';
 import { sessionSeatsKey } from '@/constants/query-keys';
+import { saveLastTicketId } from '@/lib/ticket-storage';
 import type { Session } from '@/types/session';
 import type { SeatMapItem } from '@/types/seat';
 import type { Reservation } from '@/types/reservation';
@@ -39,13 +40,16 @@ function extractApiErrorMessage(raw: string): string | null {
   return null;
 }
 
+type PaymentDecision = 'APPROVE' | 'DECLINE';
+
 interface ReservationPanelProps {
   session: Session;
   seats: SeatMapItem[];
   selectedSeatId: string | null;
   reservation: Reservation | null;
-  onReserved: (reservation: Reservation) => void;
+  onReservationChange: (reservation: Reservation) => void;
   onClearSelection: () => void;
+  onReset: () => void;
 }
 
 export function ReservationPanel({
@@ -53,21 +57,25 @@ export function ReservationPanel({
   seats,
   selectedSeatId,
   reservation,
-  onReserved,
+  onReservationChange,
   onClearSelection,
+  onReset,
 }: ReservationPanelProps) {
   const router = useRouter();
   const { isAuthenticated, accessToken } = useAuth();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const remainingMs = useCountdown(reservation?.expiresAt ?? null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const remainingMs = useCountdown(
+    reservation?.status === 'PENDING' ? reservation.expiresAt : null,
+  );
 
   const loginRedirect = () =>
     router.push(
       `/login?redirect=${encodeURIComponent(`/sessions/${session.id}`)}`,
     );
 
-  const mutation = useMutation({
+  const reservationMutation = useMutation({
     mutationFn: () =>
       apiClient.post<Reservation>(
         '/reservations',
@@ -76,7 +84,7 @@ export function ReservationPanel({
       ),
     onSuccess: (data) => {
       setError(null);
-      onReserved(data);
+      onReservationChange(data);
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError && err.status === 409) {
@@ -114,40 +122,167 @@ export function ReservationPanel({
     },
   });
 
+  // TAREFA 1 (Sprint 4): decisão de pagamento sempre explícita — dois botões,
+  // nunca aleatório/automático (D04). APPROVE gera Ticket no backend na mesma
+  // transação; DECLINE libera o assento imediatamente via WebSocket.
+  const paymentMutation = useMutation({
+    mutationFn: (decision: PaymentDecision) => {
+      if (!reservation) throw new Error('Nenhuma reserva ativa para pagar');
+      return apiClient.post<Reservation>(
+        '/payments',
+        { reservationId: reservation.id, decision },
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+    },
+    onSuccess: (data) => {
+      setPaymentError(null);
+      onReservationChange(data);
+      // DECLINE libera o assento via WebSocket (seatsGateway), mas o cache
+      // local pode não ter recebido o evento ainda no instante do clique —
+      // invalidar garante consistência mesmo se o evento chegar atrasado.
+      if (data.status === 'CANCELLED') {
+        queryClient.invalidateQueries({
+          queryKey: sessionSeatsKey(session.id),
+        });
+      }
+      // TAREFA 2 (Sprint 4): redireciona direto pro ingresso recém-criado —
+      // `ticketId` só vem preenchido em APPROVE (ver types/reservation.ts).
+      // Guardado em localStorage também, pra uma visita futura em
+      // /my-tickets sem vir desse redirect encontrar o mesmo ingresso.
+      if (data.status === 'PAID' && data.ticketId) {
+        saveLastTicketId(data.ticketId);
+        router.push(`/my-tickets/${data.ticketId}`);
+      }
+    },
+    onError: (err: unknown) => {
+      if (err instanceof ApiError && err.status === 409) {
+        setPaymentError(
+          'Esta reserva não está mais disponível para pagamento — pode ter expirado, sido paga ou cancelada.',
+        );
+        return;
+      }
+      if (err instanceof ApiError && err.status === 403) {
+        setPaymentError('Você não tem permissão para pagar esta reserva.');
+        return;
+      }
+      setPaymentError(
+        'Não foi possível processar o pagamento. Tente novamente.',
+      );
+    },
+  });
+
   const selectedSeat = seats.find((seat) => seat.id === selectedSeatId);
 
   if (reservation) {
     const reservedSeat = seats.find((seat) => seat.id === reservation.seatId);
-    const expired = remainingMs !== null && remainingMs <= 0;
+    const seatLabel = reservedSeat
+      ? `${reservedSeat.row}${reservedSeat.number}`
+      : reservation.seatId;
+    const expired =
+      reservation.status === 'PENDING' &&
+      remainingMs !== null &&
+      remainingMs <= 0;
 
+    if (reservation.status === 'PAID') {
+      return (
+        <div className='rounded-lg border border-border bg-card p-4'>
+          <h2 className='font-display text-lg font-semibold text-primary'>
+            Pagamento aprovado
+          </h2>
+          <p className='mt-1 text-sm text-muted-foreground'>
+            Assento {seatLabel} — seu ingresso foi gerado.
+          </p>
+          <Link
+            href='/my-tickets'
+            className='mt-4 inline-block text-sm text-primary underline-offset-4 hover:underline'
+          >
+            Ver meus ingressos
+          </Link>
+        </div>
+      );
+    }
+
+    if (reservation.status === 'CANCELLED') {
+      return (
+        <div className='rounded-lg border border-border bg-card p-4'>
+          <h2 className='font-display text-lg font-semibold'>
+            Reserva cancelada
+          </h2>
+          <p className='mt-1 text-sm text-muted-foreground'>
+            O pagamento foi recusado — o assento {seatLabel} foi liberado e já
+            pode ser escolhido por outra pessoa.
+          </p>
+          <div className='mt-4 flex flex-wrap gap-3'>
+            <Button onClick={onReset}>Escolher outro assento</Button>
+            <Button variant='outline' asChild>
+              <Link href='/'>Ver outras sessões</Link>
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (expired) {
+      return (
+        <div className='rounded-lg border border-border bg-card p-4'>
+          <h2 className='font-display text-lg font-semibold'>
+            Reserva expirada
+          </h2>
+          <p className='mt-1 text-sm text-muted-foreground'>
+            O prazo de 5 minutos para pagamento acabou e o assento {seatLabel}{' '}
+            foi liberado.
+          </p>
+          <Button className='mt-4' onClick={onReset}>
+            Escolher outro assento
+          </Button>
+        </div>
+      );
+    }
+
+    // status PENDING, dentro do prazo — pagamento simulado (D04).
     return (
       <div className='rounded-lg border border-border bg-card p-4'>
         <h2 className='font-display text-lg font-semibold'>
-          Reserva confirmada
+          Confirme o pagamento
         </h2>
         <p className='mt-1 text-sm text-muted-foreground'>
-          Assento{' '}
-          {reservedSeat
-            ? `${reservedSeat.row}${reservedSeat.number}`
-            : reservation.seatId}{' '}
-          — {expired ? 'expirada' : 'pendente de pagamento'}
+          Assento {seatLabel} — pendente de pagamento
         </p>
-        {!expired && remainingMs !== null && (
+        {remainingMs !== null && (
           <p className='mt-2 font-display text-2xl font-bold text-primary'>
             {formatCountdown(remainingMs)}
           </p>
         )}
-        <p className='mt-2 text-xs text-muted-foreground'>
-          Pagamento e emissão de ingresso chegam em uma etapa futura do projeto
-          — este é só um indicativo visual do prazo (o backend expira a reserva
-          de verdade, ver D05).
+        {paymentError && (
+          <p className='mt-2 text-sm text-destructive' role='alert'>
+            {paymentError}
+          </p>
+        )}
+        <div className='mt-4 flex flex-wrap gap-3'>
+          <Button
+            disabled={paymentMutation.isPending}
+            onClick={() => paymentMutation.mutate('APPROVE')}
+          >
+            {paymentMutation.isPending &&
+            paymentMutation.variables === 'APPROVE'
+              ? 'Processando...'
+              : 'Aprovar pagamento'}
+          </Button>
+          <Button
+            variant='outline'
+            disabled={paymentMutation.isPending}
+            onClick={() => paymentMutation.mutate('DECLINE')}
+          >
+            {paymentMutation.isPending &&
+            paymentMutation.variables === 'DECLINE'
+              ? 'Processando...'
+              : 'Recusar pagamento'}
+          </Button>
+        </div>
+        <p className='mt-3 text-xs text-muted-foreground'>
+          Pagamento simulado — a decisão é sempre explícita, nunca automática
+          (D04).
         </p>
-        <Link
-          href='/my-tickets'
-          className='mt-4 inline-block text-sm text-primary underline-offset-4 hover:underline'
-        >
-          Ver meus ingressos
-        </Link>
       </div>
     );
   }
@@ -165,19 +300,23 @@ export function ReservationPanel({
           Escolha um assento disponível no mapa.
         </p>
       )}
-      {error && <p className='mt-2 text-sm text-destructive'>{error}</p>}
+      {error && (
+        <p className='mt-2 text-sm text-destructive' role='alert'>
+          {error}
+        </p>
+      )}
       <Button
         className='mt-4 w-full'
-        disabled={!selectedSeatId || mutation.isPending}
+        disabled={!selectedSeatId || reservationMutation.isPending}
         onClick={() => {
           if (!isAuthenticated) {
             loginRedirect();
             return;
           }
-          mutation.mutate();
+          reservationMutation.mutate();
         }}
       >
-        {mutation.isPending ? 'Confirmando...' : 'Confirmar reserva'}
+        {reservationMutation.isPending ? 'Confirmando...' : 'Confirmar reserva'}
       </Button>
     </div>
   );

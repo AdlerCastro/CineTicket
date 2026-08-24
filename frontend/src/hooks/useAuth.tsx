@@ -19,6 +19,11 @@ interface AuthContextValue {
   user: AuthenticatedUser | null;
   accessToken: string | null;
   isAuthenticated: boolean;
+  // Sprint 4: true só depois da leitura inicial de localStorage — guards de
+  // rota por papel (useRequireRole) precisam disso pra não redirecionar
+  // erroneamente pro /login num primeiro render em que a sessão ainda não
+  // foi carregada (o useEffect abaixo é assíncrono em relação ao mount).
+  isHydrated: boolean;
   login: (accessToken: string, user: AuthenticatedUser) => void;
   logout: () => void;
 }
@@ -30,6 +35,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     const stored = loadAuthSession();
@@ -37,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(stored.user);
       setAccessToken(stored.accessToken);
     }
+    setIsHydrated(true);
   }, []);
 
   const login = useCallback((token: string, authUser: AuthenticatedUser) => {
@@ -57,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         accessToken,
         isAuthenticated: accessToken !== null,
+        isHydrated,
         login,
         logout,
       }}
