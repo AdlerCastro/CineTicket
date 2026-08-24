@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Inter, Poppins } from 'next/font/google';
 
 import { ThemeToggle } from '@/components/molecules/ThemeToggle';
@@ -32,10 +33,18 @@ export default function RootLayout({
         className={`${inter.variable} ${poppins.variable} font-sans antialiased`}
       >
         <Providers>
-          <header className='flex items-center justify-between gap-3 border-b border-border px-6 py-4'>
-            <span className='shrink-0 font-display text-lg font-bold text-primary'>
+          {/* D52: flex-wrap em vez de hambúrguer — com ação de papel (Meus
+              Ingressos/Painel) somada ao nome de usuário, nem sempre cabe
+              tudo numa linha só em viewport estreito; deixar quebrar pra uma
+              segunda linha evita overflow horizontal sem precisar de menu
+              colapsável (escopo enxuto, ver CLAUDE.md/D52). */}
+          <header className='flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-6 py-4'>
+            <Link
+              href='/'
+              className='shrink-0 font-display text-lg font-bold text-primary'
+            >
               CineTicket
-            </span>
+            </Link>
             <div className='flex min-w-0 items-center gap-2 sm:gap-4'>
               <AuthStatus />
               <ThemeToggle />

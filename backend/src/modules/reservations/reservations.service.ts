@@ -9,6 +9,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { RESERVATION_TTL_MINUTES } from '@/constants/reservation.constants';
 import { SeatsGateway } from '@/modules/gateway/seats.gateway';
 import { CreateReservationDto } from './dto/create-reservation.dto';
+import { ActiveReservationResponse } from './dto/active-reservation.dto';
 
 @Injectable()
 export class ReservationsService {
@@ -47,6 +48,36 @@ export class ReservationsService {
         status: 'AVAILABLE',
       });
     });
+  }
+
+  // D54: GET /reservations/mine/active. Sweep lazy ANTES de ler — mesmo
+  // padrão de create()/payments/seats (D05) — senão uma PENDING vencida mas
+  // ainda não varrida seria devolvida como "ativa" ao frontend. Isolamento
+  // por customerId no próprio WHERE (não é findFirst genérico + checagem de
+  // dono depois): reserva PENDING de outro customer na mesma sessão nunca
+  // entra no resultado, então não há dado alheio pra vazar em erro.
+  async findActiveMineForSession(
+    customerId: string,
+    sessionId: string,
+  ): Promise<ActiveReservationResponse | null> {
+    await this.expireStalePendingForSession(sessionId);
+
+    const reservation = await this.prisma.reservation.findFirst({
+      where: {
+        sessionId,
+        customerId,
+        status: ReservationStatus.PENDING,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, seatId: true, expiresAt: true },
+    });
+    if (!reservation) return null;
+
+    return {
+      reservationId: reservation.id,
+      seatId: reservation.seatId,
+      expiresAt: reservation.expiresAt,
+    };
   }
 
   async create(
