@@ -368,6 +368,10 @@ Branch `test/e2e-journey-specs`. 3 specs novos em `backend/test/e2e/`, um por pa
 
 `lint`/`test`/`test:e2e`/`build` limpos. `pnpm test` (unitários) continua sem testes (`test/unit/` só tem `.gitkeep`, nenhuma tarefa de QA até agora adicionou teste unitário — só e2e).
 
+**Frontend — Sprint 5 (README, 24/08):**
+
+Branch `docs/sprint-5-final-readmes`. Criado `frontend/README.md` (repositório nunca teve um; só `backend/README.md` existia desde o Sprint 1). Conteúdo derivado do estado real do repo nesta sessão, não presumido: variáveis de ambiente lidas de `frontend/.env.example` (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`), scripts lidos de `frontend/package.json`, estrutura de rotas confirmada via `find src -maxdepth 3 -type d` e via output real de `next build` (rotas geradas batem com os 4 route groups documentados). `pnpm --filter frontend lint` e `pnpm --filter frontend build` rodados nesta sessão antes de escrever o README — ambos limpos (build gera as 11 rotas esperadas, sem erro de tipo). Credenciais de teste não duplicadas — README linka para `backend/README.md` e só indica qual usuário semeado testar em qual rota (`/` e `/my-tickets` → cliente1/cliente2, `/dashboard` → organizador, `/check-in` → portaria).
+
 ## Pendente (ordem de sprint, ver `agent-ecosystem.md`)
 
 - [x] Sprint 1 (infra) — Workspace root, esqueleto de `backend/`/`frontend/`/`packages/shared/`, Postgres de dev containerizado.
