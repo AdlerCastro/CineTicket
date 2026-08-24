@@ -1,14 +1,17 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from '@/hooks/useSession';
 import { useSeatMap } from '@/hooks/useSeatMap';
 import { useSessionSocket } from '@/hooks/useSessionSocket';
 import { useSeatSelection } from '@/hooks/useSeatSelection';
+import { useActiveReservation } from '@/hooks/useActiveReservation';
+import { useAuth } from '@/hooks/useAuth';
 import { SeatMap } from '@/components/organisms/SeatMap';
 import { ReservationPanel } from '@/components/organisms/ReservationPanel';
 import { formatSessionDateTime } from '@/lib/utils';
+import { ReservationStatus } from '@/enums/reservation-status.enum';
 import type { Reservation } from '@/types/reservation';
 
 const WS_STATUS_LABEL = {
@@ -30,6 +33,35 @@ export default function SessionDetailPage() {
   const wsStatus = useSessionSocket(sessionId);
   const { selectedSeatId, toggleSeat, clearSelection } = useSeatSelection();
   const [reservation, setReservation] = useState<Reservation | null>(null);
+  const { user, isAuthenticated } = useAuth();
+
+  // D54: reidrata o painel a partir do backend quando o customer já tem uma
+  // Reservation PENDING ativa nesta sessão — sem isso o estado local começa
+  // sempre nulo e o painel mostra "escolha um assento" apesar do assento já
+  // travado no backend (ver .context/project-state.md, risco #16/D52).
+  const { data: activeReservation, isLoading: checkingActiveReservation } =
+    useActiveReservation(sessionId);
+
+  useEffect(() => {
+    // Guardas contra sobrescrever um estado local mais recente: reserva já
+    // criada nesta visita (`reservation`) ou seleção manual em andamento
+    // (`selectedSeatId`) — ambos legítimos e mais frescos que o snapshot do
+    // GET, que só reflete o que existia no momento em que a página montou.
+    if (!activeReservation || reservation || selectedSeatId) return;
+    setReservation({
+      id: activeReservation.reservationId,
+      sessionId,
+      seatId: activeReservation.seatId,
+      customerId: user?.id ?? '',
+      status: ReservationStatus.PENDING,
+      expiresAt: activeReservation.expiresAt,
+      // Não vêm de GET /reservations/mine/active (shape mínimo, D54) e não
+      // são lidos em nenhum lugar do render do ReservationPanel — placeholder
+      // sem significado, nunca exibido.
+      createdAt: activeReservation.expiresAt,
+      updatedAt: activeReservation.expiresAt,
+    });
+  }, [activeReservation, reservation, selectedSeatId, sessionId, user?.id]);
 
   if (loadingSession || loadingSeats) {
     return <p className='text-muted-foreground'>Carregando sessão...</p>;
@@ -66,7 +98,10 @@ export default function SessionDetailPage() {
           seats={seats ?? []}
           selectedSeatId={selectedSeatId}
           highlightSeatId={reservation?.seatId ?? null}
-          disabled={Boolean(reservation)}
+          disabled={
+            Boolean(reservation) ||
+            (isAuthenticated && checkingActiveReservation)
+          }
           onSelectSeat={(seat) => {
             if (seat.status === 'AVAILABLE') toggleSeat(seat.id);
           }}
@@ -76,6 +111,9 @@ export default function SessionDetailPage() {
           seats={seats ?? []}
           selectedSeatId={selectedSeatId}
           reservation={reservation}
+          isCheckingActiveReservation={
+            isAuthenticated && checkingActiveReservation
+          }
           onReservationChange={setReservation}
           onClearSelection={clearSelection}
           onReset={() => {
