@@ -10,6 +10,7 @@ import { ReservationsService } from '@/modules/reservations/reservations.service
 import { TicketsService } from '@/modules/tickets/tickets.service';
 import { SeatsGateway } from '@/modules/gateway/seats.gateway';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
+import { PaymentResponse } from './dto/payment-response.dto';
 
 const NOT_PAYABLE_MESSAGE =
   'Reserva não está mais pendente de pagamento (expirada, já paga ou cancelada)';
@@ -26,7 +27,7 @@ export class PaymentsService {
   async process(
     dto: ProcessPaymentDto,
     customerId: string,
-  ): Promise<Reservation> {
+  ): Promise<PaymentResponse> {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id: dto.reservationId },
     });
@@ -91,35 +92,40 @@ export class PaymentsService {
   private async approve(
     reservationId: string,
     sessionId: string,
-  ): Promise<Reservation> {
+  ): Promise<PaymentResponse> {
     // Ticket gerado NA MESMA transação da aprovação do pagamento — decisão
     // documentada em .context/project-state.md. A transição de estado
     // PENDING->PAID é condicional (mesmo raciocínio de decline() acima): só
     // quem vence a corrida chega a criar o Ticket, o que também evita a
     // violação de `Ticket.reservationId @unique` que uma segunda aprovação
     // concorrente causaria (e que antes vazava como 500 não tratado).
-    const paid = await this.prisma.$transaction(async (tx) => {
-      const updateResult = await tx.reservation.updateMany({
-        where: { id: reservationId, status: ReservationStatus.PENDING },
-        data: { status: ReservationStatus.PAID },
-      });
+    const { reservation, ticketId } = await this.prisma.$transaction(
+      async (tx) => {
+        const updateResult = await tx.reservation.updateMany({
+          where: { id: reservationId, status: ReservationStatus.PENDING },
+          data: { status: ReservationStatus.PAID },
+        });
 
-      if (updateResult.count === 0) {
-        throw new ConflictException(NOT_PAYABLE_MESSAGE);
-      }
+        if (updateResult.count === 0) {
+          throw new ConflictException(NOT_PAYABLE_MESSAGE);
+        }
 
-      const updated = await tx.reservation.findUniqueOrThrow({
-        where: { id: reservationId },
-      });
-      await this.ticketsService.createForReservation(updated.id, tx);
-      return updated;
-    });
+        const updated = await tx.reservation.findUniqueOrThrow({
+          where: { id: reservationId },
+        });
+        const ticket = await this.ticketsService.createForReservation(
+          updated.id,
+          tx,
+        );
+        return { reservation: updated, ticketId: ticket.id };
+      },
+    );
 
     this.seatsGateway.emitSeatUpdate(sessionId, {
-      seatId: paid.seatId,
+      seatId: reservation.seatId,
       status: 'PAID',
     });
 
-    return paid;
+    return { ...reservation, ticketId };
   }
 }
