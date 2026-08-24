@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -56,6 +57,17 @@ export class ReservationsService {
       where: { id: dto.sessionId },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
+
+    // D44: equivalente REST da checagem já feita pelo Gateway (D40) em
+    // join:session. Mensagem explícita aqui — diferente do Gateway, que usa
+    // texto genérico pra não vazar "existe mas é rascunho" a quem só está
+    // sondando sem autenticação. Criar reserva já exige login (D32), então
+    // quem chega até aqui não é um estranho sondando às cegas.
+    if (!session.published) {
+      throw new ForbiddenException(
+        'Sessão ainda não publicada — não é possível reservar assentos',
+      );
+    }
 
     const seat = await this.prisma.seat.findFirst({
       where: { id: dto.seatId, sessionId: dto.sessionId },

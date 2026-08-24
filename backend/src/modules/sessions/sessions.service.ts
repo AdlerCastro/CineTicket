@@ -10,6 +10,17 @@ import { SEATS_PER_ROW } from '@/constants/seat.constants';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
 
+// D44: Movie não tem campo interno/de cache que precise ser filtrado (ao
+// contrário de User, que tem password/refreshTokenHash de verdade) — por
+// isso a relação inteira é incluída via Prisma `include`, sem select
+// explícito, no mesmo padrão já usado pelo restante do módulo (Session/Seat
+// também retornam o model cru, só User aplica filtro campo a campo).
+const SESSION_WITH_MOVIE_INCLUDE = { movie: true } as const;
+
+export type SessionWithMovie = Prisma.SessionGetPayload<{
+  include: typeof SESSION_WITH_MOVIE_INCLUDE;
+}>;
+
 @Injectable()
 export class SessionsService {
   constructor(
@@ -17,12 +28,18 @@ export class SessionsService {
     private readonly moviesService: MoviesService,
   ) {}
 
-  findAll(): Promise<Session[]> {
-    return this.prisma.session.findMany({ orderBy: { startsAt: 'asc' } });
+  findAll(): Promise<SessionWithMovie[]> {
+    return this.prisma.session.findMany({
+      orderBy: { startsAt: 'asc' },
+      include: SESSION_WITH_MOVIE_INCLUDE,
+    });
   }
 
-  async findOne(id: string): Promise<Session> {
-    const session = await this.prisma.session.findUnique({ where: { id } });
+  async findOne(id: string): Promise<SessionWithMovie> {
+    const session = await this.prisma.session.findUnique({
+      where: { id },
+      include: SESSION_WITH_MOVIE_INCLUDE,
+    });
     if (!session) throw new NotFoundException('Sessão não encontrada');
     return session;
   }
