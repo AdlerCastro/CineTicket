@@ -9,14 +9,23 @@ export default function HomePage() {
   const { data: sessions, isLoading, isError } = useSessions();
   const [query, setQuery] = useState('');
 
+  // D57 (continuação): useSessions agora envia Authorization quando o
+  // usuário está logado, então a resposta pode incluir o próprio rascunho do
+  // organizador (mesma regra que faz o painel funcionar, D50). A home
+  // pública não deve misturar rascunho nenhum, nem do dono logado — filtro
+  // explícito aqui, não depende do que o backend decidiu incluir.
+  const publishedSessions = useMemo(
+    () => sessions?.filter((session) => session.published) ?? [],
+    [sessions],
+  );
+
   const filtered = useMemo(() => {
-    if (!sessions) return [];
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return sessions;
-    return sessions.filter((session) =>
+    if (!normalized) return publishedSessions;
+    return publishedSessions.filter((session) =>
       session.room.toLowerCase().includes(normalized),
     );
-  }, [sessions, query]);
+  }, [publishedSessions, query]);
 
   return (
     <div>
