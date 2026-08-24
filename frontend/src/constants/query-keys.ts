@@ -5,3 +5,6 @@ export const sessionKey = (sessionId: string) =>
 
 export const sessionSeatsKey = (sessionId: string) =>
   ['sessions', sessionId, 'seats'] as const;
+
+export const movieSearchKey = (query: string) =>
+  ['movies', 'search', query] as const;
