@@ -32,11 +32,11 @@ export default function RootLayout({
         className={`${inter.variable} ${poppins.variable} font-sans antialiased`}
       >
         <Providers>
-          <header className='flex items-center justify-between border-b border-border px-6 py-4'>
-            <span className='font-display text-lg font-bold text-primary'>
+          <header className='flex items-center justify-between gap-3 border-b border-border px-6 py-4'>
+            <span className='shrink-0 font-display text-lg font-bold text-primary'>
               CineTicket
             </span>
-            <div className='flex items-center gap-4'>
+            <div className='flex min-w-0 items-center gap-2 sm:gap-4'>
               <AuthStatus />
               <ThemeToggle />
             </div>
