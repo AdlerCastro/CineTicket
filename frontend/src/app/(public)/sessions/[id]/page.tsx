@@ -76,8 +76,12 @@ export default function SessionDetailPage() {
           seats={seats ?? []}
           selectedSeatId={selectedSeatId}
           reservation={reservation}
-          onReserved={setReservation}
+          onReservationChange={setReservation}
           onClearSelection={clearSelection}
+          onReset={() => {
+            setReservation(null);
+            clearSelection();
+          }}
         />
       </div>
     </div>
