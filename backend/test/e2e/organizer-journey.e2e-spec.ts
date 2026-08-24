@@ -60,10 +60,12 @@ describe('Jornada completa do Organizador (criar sessão → publicar → venda 
     const sessionId = createResponse.body.id as string;
 
     // 3. GET /sessions/:id/seats — confirma que os assentos já foram
-    // gerados atomicamente na criação, sem passo adicional.
-    const seatsResponse = await request(app.getHttpServer()).get(
-      `/sessions/${sessionId}/seats`,
-    );
+    // gerados atomicamente na criação, sem passo adicional. Autorização
+    // enviada porque a sessão ainda é rascunho (published: false) — desde o
+    // risco #6, só o organizador dono enxerga o mapa de uma sessão rascunho.
+    const seatsResponse = await request(app.getHttpServer())
+      .get(`/sessions/${sessionId}/seats`)
+      .set('Authorization', `Bearer ${organizerToken}`);
     expect(seatsResponse.status).toBe(200);
     const seatEntries = seatsResponse.body as SeatMapItemResponse[];
     expect(seatEntries).toHaveLength(2);
