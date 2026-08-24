@@ -14,6 +14,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { ValidateTicketDto } from './dto/validate-ticket.dto';
 import {
   TicketDisplayResponse,
+  ValidatedTicketResponse,
   ValidateTicketResponse,
 } from './dto/ticket-display.dto';
 
@@ -29,6 +30,16 @@ const TICKET_WITH_DETAILS_INCLUDE = {
 
 type TicketWithDetails = Prisma.TicketGetPayload<{
   include: typeof TICKET_WITH_DETAILS_INCLUDE;
+}>;
+
+// D56: só o necessário pra listar histórico de portaria — sem session/movie
+// (ver justificativa em ValidatedTicketResponse).
+const TICKET_WITH_SEAT_INCLUDE = {
+  reservation: { include: { seat: true } },
+} as const;
+
+type TicketWithSeat = Prisma.TicketGetPayload<{
+  include: typeof TICKET_WITH_SEAT_INCLUDE;
 }>;
 
 interface TicketJwtPayload {
@@ -101,6 +112,29 @@ export class TicketsService {
     });
 
     return tickets.map((ticket) => this.toDisplayResponse(ticket));
+  }
+
+  // D56: GET /tickets/validated?sessionId=X — histórico de ingressos
+  // validados (USED) de uma sessão, mais recente primeiro. Ordena por
+  // `usedAt` (data da validação em si), diferente de findAllForCustomer
+  // (D53) que ordena por `createdAt` (data de emissão) — aqui é o momento em
+  // que a portaria bateu o ingresso que importa, não quando foi comprado.
+  // Sem checagem de ownership: papel GATE consulta por sessão, não existe
+  // "dono" do Ticket nesse contexto (ver CLAUDE.md — toda rota autenticada
+  // usa @Roles, guard já resolve isso no controller).
+  async findValidatedForSession(
+    sessionId: string,
+  ): Promise<ValidatedTicketResponse[]> {
+    const tickets = await this.prisma.ticket.findMany({
+      where: {
+        status: TicketStatus.USED,
+        reservation: { sessionId },
+      },
+      include: TICKET_WITH_SEAT_INCLUDE,
+      orderBy: { usedAt: 'desc' },
+    });
+
+    return tickets.map((ticket) => this.toValidatedResponse(ticket));
   }
 
   async validate(dto: ValidateTicketDto): Promise<ValidateTicketResponse> {
@@ -181,6 +215,19 @@ export class TicketsService {
         message: 'Assinatura inválida ou ingresso malformado',
       });
     }
+  }
+
+  private toValidatedResponse(ticket: TicketWithSeat): ValidatedTicketResponse {
+    return {
+      id: ticket.id,
+      status: ticket.status,
+      usedAt: ticket.usedAt,
+      seat: {
+        id: ticket.reservation.seat.id,
+        row: ticket.reservation.seat.row,
+        number: ticket.reservation.seat.number,
+      },
+    };
   }
 
   private toDisplayResponse(ticket: TicketWithDetails): TicketDisplayResponse {

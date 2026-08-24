@@ -34,3 +34,20 @@ export interface ValidateTicketResponse {
   result: TicketValidationResult;
   ticket: TicketDisplayResponse;
 }
+
+// D56: histórico de ingressos validados na portaria, filtrado por sessão.
+// Sem `session`/`movie` aninhados — a portaria já selecionou a sessão antes
+// de validar (D46), então o frontend já sabe qual sessão está exibindo;
+// reenviar o objeto inteiro seria dado redundante. Não é ownership (GATE
+// consulta por sessão, não por "dono" do Ticket, ao contrário de
+// TicketDisplayResponse).
+export interface ValidatedTicketResponse {
+  id: string;
+  status: TicketStatus;
+  usedAt: Date | null;
+  seat: {
+    id: string;
+    row: string;
+    number: number;
+  };
+}

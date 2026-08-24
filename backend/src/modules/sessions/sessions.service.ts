@@ -28,14 +28,43 @@ export class SessionsService {
     private readonly moviesService: MoviesService,
   ) {}
 
-  findAll(): Promise<SessionWithMovie[]> {
+  // Risco #6: sessão published:false só é visível pro organizador dono —
+  // pra qualquer outro (anônimo ou outro organizador), a sessão é filtrada
+  // da listagem. `currentUserId` vem de auth OPCIONAL (OptionalJwtAuthGuard,
+  // ver sessions.controller.ts) — undefined/null tratado como visitante.
+  findAll(currentUserId?: string | null): Promise<SessionWithMovie[]> {
     return this.prisma.session.findMany({
+      where: currentUserId
+        ? { OR: [{ published: true }, { organizerId: currentUserId }] }
+        : { published: true },
       orderBy: { startsAt: 'asc' },
       include: SESSION_WITH_MOVIE_INCLUDE,
     });
   }
 
-  async findOne(id: string): Promise<SessionWithMovie> {
+  // Risco #6: mesma regra de findAll, para leitura de uma sessão específica.
+  // 404 (não 403) quando published:false e quem pede não é o dono — mesmo
+  // raciocínio de "não vazar informação" já usado pelo Gateway (D40): não dá
+  // pra confirmar que a sessão existe pra quem não deveria saber.
+  async findOne(
+    id: string,
+    currentUserId?: string | null,
+  ): Promise<SessionWithMovie> {
+    const session = await this.findRaw(id);
+    const isOwner =
+      currentUserId != null && session.organizerId === currentUserId;
+    if (!session.published && !isOwner) {
+      throw new NotFoundException('Sessão não encontrada');
+    }
+    return session;
+  }
+
+  // Busca sem filtro de visibilidade — só existência. Usado por update()
+  // (organizador precisa conseguir buscar a própria sessão rascunho pra
+  // editar; a checagem de dono ali já é feita separadamente, com 403 em vez
+  // de 404, porque quem chama update() já está autenticado e não está só
+  // "olhando", D10) e pelo Gateway (D40, sem exceção pro dono).
+  private async findRaw(id: string): Promise<SessionWithMovie> {
     const session = await this.prisma.session.findUnique({
       where: { id },
       include: SESSION_WITH_MOVIE_INCLUDE,
@@ -73,7 +102,7 @@ export class SessionsService {
     dto: UpdateSessionDto,
     organizerId: string,
   ): Promise<Session> {
-    const session = await this.findOne(id);
+    const session = await this.findRaw(id);
 
     // D10: escrita restrita ao dono, além do @Roles('ORGANIZER') do controller.
     if (session.organizerId !== organizerId) {

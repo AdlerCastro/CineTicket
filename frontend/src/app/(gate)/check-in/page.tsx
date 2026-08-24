@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRequireRole } from '@/hooks/useRequireRole';
 import { SessionSelect } from '@/components/molecules/SessionSelect';
 import { GateScanner } from '@/components/organisms/GateScanner';
+import { ValidatedTicketsHistory } from '@/components/organisms/ValidatedTicketsHistory';
 
 export default function GateCheckInPage() {
   const status = useRequireRole('GATE');
@@ -26,7 +27,10 @@ export default function GateCheckInPage() {
       </div>
 
       {sessionId ? (
-        <GateScanner sessionId={sessionId} />
+        <>
+          <GateScanner sessionId={sessionId} />
+          <ValidatedTicketsHistory sessionId={sessionId} />
+        </>
       ) : (
         <p className='mt-6 text-sm text-muted-foreground'>
           Selecione uma sessão para habilitar a câmera e o campo manual.
