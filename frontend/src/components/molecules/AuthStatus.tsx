@@ -19,9 +19,16 @@ export function AuthStatus() {
   }
 
   return (
-    <div className='flex items-center gap-3 text-sm'>
-      <span className='text-muted-foreground'>{user.name}</span>
-      <Button variant='ghost' size='sm' onClick={logout}>
+    <div className='flex min-w-0 items-center gap-2 text-sm sm:gap-3'>
+      <span className='max-w-[6rem] truncate text-muted-foreground sm:max-w-none'>
+        {user.name}
+      </span>
+      <Button
+        variant='ghost'
+        size='sm'
+        onClick={logout}
+        className='shrink-0 px-2 sm:px-3'
+      >
         Sair
       </Button>
     </div>
