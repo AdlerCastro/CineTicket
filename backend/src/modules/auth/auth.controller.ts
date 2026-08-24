@@ -1,11 +1,13 @@
 import { Response } from 'express';
 import { Controller, Post, Body, Res } from '@nestjs/common';
+import { loginSchema } from '@cineticket/shared';
 import { AuthService } from './auth.service';
 import {
   AuthenticateUserRequest,
   AuthenticateUserResponse,
 } from './dto/login.dto';
 import { AppConfigService } from '@/config/config.service';
+import { ZodValidationPipe } from '@/common/pipes/zod-validation.pipe';
 
 @Controller('auth')
 export class AuthController {
@@ -16,7 +18,7 @@ export class AuthController {
 
   @Post('login')
   async login(
-    @Body() dto: AuthenticateUserRequest,
+    @Body(new ZodValidationPipe(loginSchema)) dto: AuthenticateUserRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthenticateUserResponse> {
     const { accessToken, refreshToken, user } = await this.authService.login(

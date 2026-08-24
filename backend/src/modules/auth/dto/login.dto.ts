@@ -1,11 +1,9 @@
 import { User } from '@prisma/client';
+import { LoginInput } from '@cineticket/shared';
 
 export type AuthenticatedUser = Omit<User, 'password' | 'refreshTokenHash'>;
 
-export interface AuthenticateUserRequest {
-  email: string;
-  password: string;
-}
+export type AuthenticateUserRequest = LoginInput;
 
 export interface AuthenticateUserResponse {
   accessToken: string;
