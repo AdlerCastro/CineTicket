@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { RolesGuard } from '@/common/guards/role.guard';
 import { ZodValidationPipe } from '@/common/pipes/zod-validation.pipe';
 import { AuthenticatedUserRole } from '@/common/types/authenticated-request.type';
-import { SessionsService } from './sessions.service';
+import { SessionsService, SessionWithMovie } from './sessions.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
 
@@ -27,13 +27,13 @@ export class SessionsController {
 
   @Get()
   @ApiOperation({ summary: 'Lista sessões (acesso público, sem login)' })
-  findAll(): Promise<Session[]> {
+  findAll(): Promise<SessionWithMovie[]> {
     return this.sessionsService.findAll();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de uma sessão (acesso público)' })
-  findOne(@Param('id') id: string): Promise<Session> {
+  findOne(@Param('id') id: string): Promise<SessionWithMovie> {
     return this.sessionsService.findOne(id);
   }
 
