@@ -1,7 +1,6 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { processPaymentSchema } from '@cineticket/shared';
-import { Reservation } from '@prisma/client';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
@@ -10,6 +9,7 @@ import { ZodValidationPipe } from '@/common/pipes/zod-validation.pipe';
 import { AuthenticatedUserRole } from '@/common/types/authenticated-request.type';
 import { PaymentsService } from './payments.service';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
+import { PaymentResponse } from './dto/payment-response.dto';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -29,7 +29,7 @@ export class PaymentsController {
     @Body(new ZodValidationPipe(processPaymentSchema))
     dto: ProcessPaymentDto,
     @CurrentUser() user: AuthenticatedUserRole,
-  ): Promise<Reservation> {
+  ): Promise<PaymentResponse> {
     return this.paymentsService.process(dto, user.id);
   }
 }
