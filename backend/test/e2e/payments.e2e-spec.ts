@@ -58,6 +58,7 @@ describe('Pagamento simulado (POST /payments)', () => {
       .send({ reservationId, decision: 'DECLINE' });
     expect(declineResponse.status).toBe(201);
     expect(declineResponse.body.status).toBe('CANCELLED');
+    expect(declineResponse.body.ticketId).toBeUndefined();
 
     const seatMapResponse = await request(app.getHttpServer()).get(
       `/sessions/${session.id}/seats`,
@@ -109,12 +110,16 @@ describe('Pagamento simulado (POST /payments)', () => {
       .send({ reservationId, decision: 'APPROVE' });
     expect(approveResponse.status).toBe(201);
     expect(approveResponse.body.status).toBe('PAID');
+    expect(approveResponse.body.ticketId).toEqual(expect.any(String));
 
     const ticket = await prisma.ticket.findUniqueOrThrow({
       where: { reservationId },
     });
     expect(ticket.status).toBe('VALID');
     expect(ticket.code).toEqual(expect.any(String));
+    // Confirma que o ticketId retornado na resposta de /payments é
+    // exatamente o Ticket criado na mesma transação, não um outro id.
+    expect(approveResponse.body.ticketId).toBe(ticket.id);
 
     const ticketResponse = await request(app.getHttpServer())
       .get(`/tickets/${ticket.id}`)
