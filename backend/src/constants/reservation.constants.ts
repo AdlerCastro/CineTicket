@@ -1,0 +1,1 @@
+export const RESERVATION_TTL_MINUTES = 5;

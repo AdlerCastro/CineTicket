@@ -64,6 +64,10 @@ COPY --from=builder --chown=nestjs:nodejs /workspace/packages/shared ./packages/
 COPY --from=builder --chown=nestjs:nodejs /workspace/backend/node_modules ./backend/node_modules
 COPY --from=builder --chown=nestjs:nodejs /workspace/backend/dist ./backend/dist
 COPY --from=builder --chown=nestjs:nodejs /workspace/backend/package.json ./backend/package.json
+# schema.prisma + migrations/ (e seed.ts, que os usa em runtime via ts-node)
+# não fazem parte do dist/ compilado pelo nest build — sem esta cópia,
+# `prisma migrate deploy`/`seed` não têm o que rodar dentro da imagem final.
+COPY --from=builder --chown=nestjs:nodejs /workspace/backend/src/prisma ./backend/src/prisma
 
 USER nestjs
 EXPOSE 3333

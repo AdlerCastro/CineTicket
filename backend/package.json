@@ -17,7 +17,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "seed": "ts-node src/prisma/seed.ts"
+    "seed": "ts-node src/prisma/seed.ts",
+    "seed:prod": "node dist/prisma/seed.js"
   },
   "prisma": {
     "schema": "src/prisma/schema.prisma"
@@ -38,22 +39,31 @@
   },
   "dependencies": {
     "@cineticket/shared": "workspace:*",
+    "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/jwt": "^11.0.0",
+    "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/platform-socket.io": "^11.2.1",
     "@nestjs/swagger": "^11.0.0",
+    "@nestjs/websockets": "^11.2.1",
     "@prisma/client": "^6.0.0",
+    "axios": "^1.19.0",
     "bcrypt": "^5.1.1",
     "class-transformer": "^0.5.1",
     "dotenv": "^16.4.7",
     "jsonwebtoken": "^9.0.2",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
@@ -62,19 +72,20 @@
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.2",
+    "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
-    "@eslint/js": "^9.17.0",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
-    "typescript-eslint": "^8.18.1",
     "jest": "^29.7.0",
     "prisma": "^6.0.0",
+    "socket.io-client": "^4.8.3",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1"
   }
 }
