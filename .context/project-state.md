@@ -2,17 +2,17 @@
 
 > Atualizado ao fim de cada sprint (ou tarefa relevante) pelo agente que a executou. Fonte que qualquer agente lê antes de começar algo novo — se este arquivo estiver desatualizado, a tarefa seguinte corre o risco de trabalhar sobre premissa errada.
 
-**Última atualização:** 21/08 — QA Agent: testes e2e automatizados de concorrência de assento e expiração de reserva (banco de teste real, porta 5435), determinísticos em múltiplas execuções. Teste de ingresso duplicado documentado como bloqueado (Sprint 4). Consolida também Backend Sprint 2 (revisão de auth/movies + sessions/seats/reservations), Frontend Sprint 1, DevOps Sprint 1 e os dois Dockerfiles, que estavam registrados em `develop` separadamente da branch de Sprint 2.
+**Última atualização:** 22/08 — Arquiteto: marco D08 fechado (D41) — smoke-test real no Railway confirmou WebSocket estável em produção (pior latência 554–642ms, idle 2.5min sem queda, reconexão automática ~600ms). WebSocket mantido, sem fallback para polling. Achado bloqueador descoberto durante o smoke-test: `backend/Dockerfile` não inclui `prisma/schema+migrations` no estágio final — deploy real do Sprint 5 falha sem correção (contornado só manualmente via SSH para este teste). Ação pendente do usuário: revogar chave SSH registrada e reverter branch de deploy do Railway.
 
 ## Fase atual
 
-Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes definido. Todos os documentos-base gerados e atualizados (`project-description.md`, `project-rules.md`, `agent-ecosystem.md`, `agent-instructions.md` de cada repo, `decisions-log.md`, até `D36`).
+Sprint 2 (Core Backend) **encerrado**. Sprint 3 (Core Frontend + Realtime) **iniciando agora**, com o Backend Agent atacando o WebSocket Gateway antes de qualquer tarefa de frontend adicional — ver D39.
 
 **Sprint 1 completo nas quatro frentes:** Backend (schema/migration/seed/config/9 módulos/schemas Zod compartilhados), Frontend (Next.js, tema customizado, dark mode, TanStack Query, esqueleto das 4 rotas de grupo), DevOps (`docker-compose.test.yml` + CI no GitHub Actions), mais tarefas avulsas pós-Sprint 1: `backend/Dockerfile` e `frontend/Dockerfile` (ambos validados localmente, build+run), integração ESLint+Prettier.
 
-**Sprint 2 (Core Backend) concluído:** auth+guards revisado e corrigido, integração TMDb, sessões/assentos/reservas com concorrência de assento validada manualmente ponta a ponta (ver seção "Backend — Sprint 2" abaixo).
+**Sprint 2 (Core Backend) concluído e fechado:** auth+guards revisado e corrigido, integração TMDb, sessões/assentos/reservas com concorrência de assento validada manualmente e por teste e2e automatizado, PR mergeado em `develop` com CI verde confirmado.
 
-**Falta:** integração dos Dockerfiles no `docker-compose.yml`/deploy Railway (`context: .` já confirmado como requisito, ver seção Dockerfile), Frontend Sprint 2/3, payments/tickets/gate (Sprint 4) — incluindo o teste automatizado de ingresso duplicado, bloqueado até essa rota existir (ver seção "QA — Sprint 2" abaixo).
+**Falta:** WebSocket Gateway (Sprint 3, em andamento agora), Frontend Sprint 2/3 (consumo real da API + realtime), payments/tickets/gate (Sprint 4) — incluindo o teste automatizado de ingresso duplicado, bloqueado até essa rota existir —, integração dos Dockerfiles no `docker-compose.yml`/deploy Railway.
 
 ## Funcional
 
@@ -62,7 +62,7 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 
 - `docker-compose.test.yml`: Postgres isolado, porta `5435`, banco `cineticket_test`, sem persistência (`tmpfs`).
 - `.github/workflows/ci.yml`: dispara em PR para `develop`/`main`. Jobs `backend` (lint → sobe compose de teste → migration → test/test:e2e → build) e `frontend` (lint → build), paralelos.
-- Validado: `actionlint` 0 erros; todos os comandos do pipeline reproduzidos manualmente com sucesso. Disparo real dentro do GitHub Actions ainda não testado (`act` indisponível) — risco residual baixo.
+- Validado: `actionlint` 0 erros; todos os comandos do pipeline reproduzidos manualmente com sucesso.
 
 **DevOps — correção pós-Sprint 2 (`prisma generate` faltando antes do lint):**
 
@@ -73,6 +73,10 @@ Descoberta e regras de desenvolvimento concluídas. Ecossistema de agentes defin
 - Mesma causa raiz do item acima, segunda camada: `backend/tsconfig.json` resolve `@cineticket/shared` via `dist/` (corrigido nesse sentido durante a revisão do Sprint 2 — ver "Decisões e riscos... Backend, Sprint 1", item de `tsconfig.json#paths`), então o lint type-aware também falha num runner limpo se `packages/shared` nunca foi buildado. Corrigido adicionando step `Build shared package` (`pnpm --filter @cineticket/shared build`) logo após `Install dependencies` e antes de `Generate Prisma client`/`Lint`, no job `backend`. Script `build` (`tsc -p tsconfig.json`) já existia em `packages/shared/package.json`, sem lacuna a preencher.
 - **Job `frontend` avaliado e não alterado**: `frontend/tsconfig.json#paths` resolve `@cineticket/shared` direto do `src/` (`../packages/shared/src/index.ts`), não do `dist/` — resolução de tipos não depende de build prévio do pacote. Além disso nenhum arquivo em `frontend/src` importa `@cineticket/shared` hoje. Confirmado empiricamente: `pnpm --filter frontend lint` e `pnpm --filter frontend build` passam sem `packages/shared/dist` presente. Se o frontend passar a consumir `@cineticket/shared` via `dist/` no futuro (ou o alias mudar), reavaliar.
 - Validado localmente simulando runner limpo: `packages/shared/dist` e `backend/node_modules/.prisma` removidos, sequência exata do job `backend` (install → build shared → prisma generate → lint) reproduzida com sucesso, artefatos restaurados depois.
+
+**DevOps — CI real confirmado rodando dentro do GitHub Actions (fechamento Sprint 2, D38):**
+
+- PR `feature/sprint-2 → develop` rodou o pipeline completo no Actions de verdade (não só reprodução manual/`actionlint`) — jobs `backend` e `frontend` verdes, confirmado pelo usuário. Fecha em definitivo o risco aberto #4 (antes "parcialmente resolvido").
 
 **Backend — Sprint 2 (auth/movies revisados + sessions/seats/reservations novos):**
 
@@ -105,14 +109,18 @@ Suíte nova em `backend/test/e2e/`, rodada contra o banco de teste real (`docker
 - **`reservation-expiration.e2e-spec.ts`** — força uma `Reservation` `PENDING` com `expiresAt` no passado direto via Prisma. **PASSOU**: `GET /sessions/:id/seats` mostra o assento `AVAILABLE` (sweep lazy), um novo cliente consegue reservar com `201`, e a reserva antiga permanece no banco como `EXPIRED` (não deletada, não colide com a nova linha `PENDING`).
 - **`ticket-single-use.e2e-spec.ts`** — **BLOQUEADO, não implementado.** `payments/` e `tickets/` continuam módulos vazios (`@Module({})`), sem rota de validação de portaria para exercitar. Marcado `describe.skip` com o roteiro completo documentado em comentário para quando o Sprint 4 implementar a rota — decisão explícita de não inventar mock/endpoint fake que não reflita o comportamento real futuro.
 
-Nenhum bug de concorrência/expiração foi encontrado — o código do Sprint 2 resistiu ao teste adversarial. Um problema pré-existente e não relacionado foi encontrado ao rodar `pnpm --filter backend lint` (comando de validação obrigatório): 173 erros de aspas duplas (violando `singleQuote: true` do Prettier) em 28 arquivos de `src/`. **Resolvido** — commit `1c8f9b1` (`:recycle: refactor: standardize import statements and string quotes across the codebase`) já normalizou aspas simples nesses 28 arquivos e nos 6 arquivos novos de `test/e2e/`. Revalidado após esse commit: `lint`/`lint:fix` limpo (0 erros, `--fix` sem alterações a fazer), `test` sem regressão, `build` sem erro, e a suíte `test:e2e` (concorrência + expiração) continua passando de forma determinística em 3 execuções completas após a reformatação.
+Nenhum bug de concorrência/expiração foi encontrado — o código do Sprint 2 resistiu ao teste adversarial.
+
+**QA — correção pós-teste (lint bloqueador de PR, fechado em D38):**
+
+Um problema pré-existente e não relacionado foi encontrado ao rodar `pnpm --filter backend lint` (comando de validação obrigatório): 173 erros de aspas duplas (violando `singleQuote: true` do Prettier) em 28 arquivos de `src/`. **Resolvido e confirmado** — `eslint --fix` aplicado em commit `style` isolado, revalidado limpo (`lint`/`lint:fix` 0 erros), sem regressão em `test`/`test:e2e`/`build`. Confirmado pelo usuário como parte do fechamento do Sprint 2 (D38).
 
 ### Ambiguidades resolvidas sem travar a tarefa (Backend, Sprint 2)
 
 1. `GET /sessions` retorna todas as sessões sem filtrar `published` — não foi pedido, vale revisão futura.
 2. Layout de assento a partir só de `capacity` — decisão de implementação, reversível.
-3. `/auth/login` continua sem `ZodValidationPipe` (violação de §5) — pré-existente, fora do checklist desta revisão.
-4. D35 (retry com backoff no Prisma) ainda não implementado — risco de crash-loop em deploy.
+3. `/auth/login` continua sem `ZodValidationPipe` (violação de §5) — pré-existente, fora do checklist desta revisão. **Ainda pendente** (backlog, não bloqueia Sprint 3, ver D39).
+4. D35 (retry com backoff no Prisma) ainda não implementado — risco de crash-loop em deploy. **Ainda pendente** (backlog, não bloqueia Sprint 3, ver D39).
 
 ### Decisões e riscos que surgiram durante a implementação (Backend, Sprint 1)
 
@@ -144,22 +152,28 @@ Nenhum bug de concorrência/expiração foi encontrado — o código do Sprint 2
 - [x] Pós-Sprint 1 — Integração ESLint + Prettier.
 - [x] Sprint 2 — Core Backend: auth+guards revisado, TMDb, sessions/seats/reservations com concorrência validada manualmente.
 - [x] Sprint 2 — QA: teste automatizado e2e de concorrência de assento e de expiração de reserva (determinísticos, banco de teste real). Teste de ingresso duplicado bloqueado por dependência do Sprint 4 (payments/tickets/gate).
-- [ ] Sprint 2/3 — Frontend: não iniciado além do esqueleto do Sprint 1.
-- [ ] Sprint 3 — Core Frontend + Realtime (WebSocket). **Marco dia 5: decisão WebSocket vs. polling.**
+- [x] Sprint 2 — Fechamento formal: lint corrigido, conflito de `decisions-log.md` resolvido, CI real confirmado verde no GitHub Actions, PR mergeado em `develop` (D38).
+- [x] **Sprint 3 — WebSocket Gateway (backend): implementado, testado localmente sob carga e validado em produção real (Railway). Marco D08 fechado (D41).**
+- [ ] Sprint 3 — Frontend: consumo real da API (sessions/seats) + integração do mapa de assentos em tempo real via WebSocket. Não iniciado além do esqueleto do Sprint 1.
 - [ ] Sprint 4 — Pagamento simulado, ingresso (JWT+QR), portaria.
 - [ ] Sprint 5 — Testes finais, deploy Railway+Vercel, README, seed, revisão final.
+- [ ] **Bloqueador confirmado do deploy real (Sprint 5), prioridade alta**: `backend/Dockerfile` não copia `src/prisma/` (schema+migrations) para o runtime — ver risco #8.
+- [ ] Backlog (não bloqueia Sprint 3, mas não é o mesmo bloqueador acima): D35 (retry com backoff no Prisma), `/auth/login` sem `ZodValidationPipe`, D40 (filtro de `published`/dono nos 3 endpoints REST de sessions).
 
 ## Riscos abertos
 
-1. **WebSocket** — sem fallback implementado; decisão de queda para polling no dia 5, se necessário, é do Arquiteto.
-2. ~~Concorrência de assento sem teste automatizado~~ — **resolvido**: `backend/test/e2e/reservations-concurrency.e2e-spec.ts` cobre isso contra o banco de teste real, determinístico em múltiplas execuções locais (ver seção "QA — Sprint 2"). Falta só confirmar que passa dentro do GitHub Actions de verdade (ver risco #4, já existente).
-3. **Deploy Railway com WebSocket** — não validado se o plano gratuito sustenta conexão persistente sem interrupção.
-4. ~~CI nunca rodou dentro do GitHub Actions de verdade~~ — **parcialmente resolvido**: rodou de verdade e encontrou um problema real (abaixo), já corrigido. Segue aberto só quanto a confirmar reprodução completa e estável do pipeline em um próximo PR.
-5. **Boot do backend crasha, não trava, sem Postgres acessível** — sem D35 implementada, risco de crash-loop no Railway. Prioridade antes do Sprint 5.
+1. ~~WebSocket em produção não validado~~ — **resolvido (D41)**: smoke-test real no Railway, 3 clientes fora da rede local. Pior latência 554–642ms (5 execuções), estável por 2.5min ocioso, reconexão automática ~600ms após queda abrupta, sem perda de evento. WebSocket confirmado como solução definitiva, sem fallback para polling. Ressalva: validado com 3 clientes, não 12 como no teste local — suficiente para estabilidade de rede, vale repetir com mais carga depois do item 8 abaixo estar corrigido.
+2. ~~Concorrência de assento sem teste automatizado~~ — **resolvido**: `backend/test/e2e/reservations-concurrency.e2e-spec.ts` cobre isso contra o banco de teste real, determinístico em múltiplas execuções, e confirmado passando dentro do GitHub Actions real (D38).
+3. ~~Deploy Railway com WebSocket não validado~~ — **resolvido (D41)**: ver item 1.
+4. ~~CI nunca rodou dentro do GitHub Actions de verdade~~ — **resolvido**: PR `feature/sprint-2 → develop` rodou o pipeline completo no Actions, jobs verdes, confirmado (D38).
+5. **Boot do backend crasha, não trava, sem Postgres acessível** — sem D35 implementada, risco de crash-loop no Railway. Não se manifestou no smoke-test do D41 (boot limpo desta vez), mas ainda não implementada — backlog, prioridade antes do Sprint 5 (não bloqueia Sprint 3).
+6. **Sessão rascunho (`published: false`) legível via REST por quem souber o `sessionId`** — D40: o WebSocket Gateway recusa subscribe em sessão não-publicada, mas `GET /sessions`, `GET /sessions/:id` e `GET /sessions/:id/seats` não filtram por `published` nem por dono. Risco prático baixo agora (sem usuário real, ID não exposto em listagem pública), mas é lacuna de autorização real. Backlog, prioridade antes do Sprint 5, mesma categoria de D35.
+7. **Achado de processo — `eslint --fix` pode quebrar silenciosamente casts de campo privado em arquivos de teste.** Durante a extensão do spec do Gateway, `eslint --fix` removeu um `as unknown as GatewayInternals` necessário (regra `no-unnecessary-type-assertion` compara tipo estrutural, não modela o check nominal de `private` do TypeScript do TS) — o arquivo parou de compilar, só detectado porque o agente recompilou via `ts-jest` em vez de confiar no lint limpo. Relevante para Sprint 4/5 (QA testando `payments`/`tickets`, possivelmente reflection semelhante em estado interno): **sempre recompilar depois de `eslint --fix` em teste que usa cast de campo privado, nunca assumir que lint limpo implica build correto.**
+8. **`backend/Dockerfile` não copia `src/prisma/` (schema + migrations) para o estágio final de runtime** — descoberto durante o smoke-test do D41: `prisma migrate deploy`/`seed` não têm o que rodar dentro do container real; só funcionou porque o agente contornou manualmente via SSH (autorizado pelo usuário só para este teste, não repetível para deploy oficial). **Bloqueador confirmado do deploy real do Sprint 5** — categoria diferente de D35/D40 (robustez/segurança desejáveis): sem correção, o deploy oficial falha exatamente como falhou aqui antes do workaround manual. Prioridade alta, antes de qualquer tentativa de deploy real.
 
 ## Decisões pendentes de revisão futura
 
-1. ~~Backfill de D27–D29~~ — resolvido, `decisions-log.md` até D36.
+1. ~~Backfill de D27–D29~~ — resolvido, `decisions-log.md` até D39.
 2. Upgrade TypeScript 7 / Prisma 7 — adiado deliberadamente.
-3. `/auth/login` sem `ZodValidationPipe` — pendente, fora do checklist da revisão do Sprint 2.
-4. **D35 (retry com backoff no Prisma) ainda não implementado** — prioridade antes do Sprint 5.
+3. `/auth/login` sem `ZodValidationPipe` — backlog, não bloqueia Sprint 3 (D39).
+4. **D35 (retry com backoff no Prisma) ainda não implementado** — backlog, prioridade antes do Sprint 5, não bloqueia Sprint 3 (D39).

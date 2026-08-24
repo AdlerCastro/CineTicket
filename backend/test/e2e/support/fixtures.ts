@@ -64,7 +64,12 @@ export async function createDisposableMovie(
 
 export async function createDisposableSession(
   prisma: PrismaClient,
-  opts: { organizerId: string; movieId: string; seatCount?: number },
+  opts: {
+    organizerId: string;
+    movieId: string;
+    seatCount?: number;
+    published?: boolean;
+  },
 ): Promise<{ session: Session; seatIds: string[] }> {
   const seatCount = opts.seatCount ?? 1;
 
@@ -76,7 +81,7 @@ export async function createDisposableSession(
       startsAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       capacity: seatCount,
       price: 20,
-      published: true,
+      published: opts.published ?? true,
     },
   });
 
