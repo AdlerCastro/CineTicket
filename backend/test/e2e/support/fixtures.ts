@@ -51,6 +51,25 @@ export async function createDisposableCustomer(
   return { user, token: signAccessToken(user.id, user.role) };
 }
 
+// Mesmo padrão de createDisposableCustomer, papel ORGANIZER — necessário
+// para o spec do risco #6 (filtro published/dono), que precisa de um
+// segundo organizador distinto do dono da sessão, além do organizador
+// semeado (ORGANIZER_EMAIL).
+export async function createDisposableOrganizer(
+  prisma: PrismaClient,
+  label: string,
+): Promise<{ user: User; token: string }> {
+  const user = await prisma.user.create({
+    data: {
+      email: `qa-${label}-${randomUUID()}@cineticket.test`,
+      password: 'not-used-token-is-signed-directly',
+      name: `QA Organizer ${label}`,
+      role: UserRole.ORGANIZER,
+    },
+  });
+  return { user, token: signAccessToken(user.id, user.role) };
+}
+
 export async function createDisposableMovie(
   prisma: PrismaClient,
 ): Promise<Movie> {
