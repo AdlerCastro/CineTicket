@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Poppins } from 'next/font/google';
 
 import { ThemeToggle } from '@/components/molecules/ThemeToggle';
+import { AuthStatus } from '@/components/molecules/AuthStatus';
 import { Providers } from '@/lib/providers';
 import '@/styles/globals.css';
 
@@ -35,7 +36,10 @@ export default function RootLayout({
             <span className='font-display text-lg font-bold text-primary'>
               CineTicket
             </span>
-            <ThemeToggle />
+            <div className='flex items-center gap-4'>
+              <AuthStatus />
+              <ThemeToggle />
+            </div>
           </header>
           <main>{children}</main>
         </Providers>
