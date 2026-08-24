@@ -20,6 +20,25 @@ function formatCountdown(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+// `ApiError.message` guarda o corpo bruto da resposta (ver src/lib/api-client.ts) —
+// o Nest devolve JSON ({ statusCode, message, error }), não texto plano.
+function extractApiErrorMessage(raw: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'message' in parsed &&
+      typeof (parsed as { message: unknown }).message === 'string'
+    ) {
+      return (parsed as { message: string }).message;
+    }
+  } catch {
+    // corpo não era JSON — segue com null, tratado como mensagem genérica.
+  }
+  return null;
+}
+
 interface ReservationPanelProps {
   session: Session;
   seats: SeatMapItem[];
@@ -70,10 +89,24 @@ export function ReservationPanel({
         });
         return;
       }
-      if (
-        err instanceof ApiError &&
-        (err.status === 401 || err.status === 403)
-      ) {
+      if (err instanceof ApiError && err.status === 403) {
+        // D44: 403 agora tem duas causas distintas — sessão não-publicada
+        // (regra de negócio, usuário já está autenticado corretamente) vs.
+        // guard de role/token (motivo real de sessão inválida). Redirecionar
+        // pro login no primeiro caso seria enganoso: a pessoa já está logada,
+        // o assento é que não pode ser reservado.
+        const message = extractApiErrorMessage(err.message);
+        if (message?.toLowerCase().includes('não publicada')) {
+          setError(
+            'Esta sessão ainda não foi publicada pelo organizador — não é possível reservar assentos.',
+          );
+          onClearSelection();
+          return;
+        }
+        loginRedirect();
+        return;
+      }
+      if (err instanceof ApiError && err.status === 401) {
         loginRedirect();
         return;
       }

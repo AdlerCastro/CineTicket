@@ -44,10 +44,10 @@ export default function SessionDetailPage() {
       <div className='flex items-start justify-between gap-4'>
         <div>
           <h1 className='font-display text-3xl font-bold'>
-            Sala {session.room}
+            {session.movie.title}
           </h1>
           <p className='mt-1 text-muted-foreground'>
-            {formatSessionDateTime(session.startsAt)}
+            Sala {session.room} — {formatSessionDateTime(session.startsAt)}
           </p>
         </div>
         {!session.published && (
