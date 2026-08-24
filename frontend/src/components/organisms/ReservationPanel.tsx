@@ -9,6 +9,7 @@ import { apiClient, ApiError } from '@/lib/api-client';
 import { useAuth } from '@/hooks/useAuth';
 import { useCountdown } from '@/hooks/useCountdown';
 import { sessionSeatsKey } from '@/constants/query-keys';
+import { saveLastTicketId } from '@/lib/ticket-storage';
 import type { Session } from '@/types/session';
 import type { SeatMapItem } from '@/types/seat';
 import type { Reservation } from '@/types/reservation';
@@ -143,6 +144,14 @@ export function ReservationPanel({
         queryClient.invalidateQueries({
           queryKey: sessionSeatsKey(session.id),
         });
+      }
+      // TAREFA 2 (Sprint 4): redireciona direto pro ingresso recém-criado —
+      // `ticketId` só vem preenchido em APPROVE (ver types/reservation.ts).
+      // Guardado em localStorage também, pra uma visita futura em
+      // /my-tickets sem vir desse redirect encontrar o mesmo ingresso.
+      if (data.status === 'PAID' && data.ticketId) {
+        saveLastTicketId(data.ticketId);
+        router.push(`/my-tickets/${data.ticketId}`);
       }
     },
     onError: (err: unknown) => {
