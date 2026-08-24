@@ -14,6 +14,9 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
+    // refreshToken do backend vem em cookie httpOnly (ver auth.controller.ts)
+    // — precisa ir/voltar em toda chamada para o cookie ter efeito.
+    credentials: 'include',
     ...init,
     headers: {
       'Content-Type': 'application/json',
