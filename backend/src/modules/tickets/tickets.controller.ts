@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -20,6 +22,7 @@ import { TicketsService } from './tickets.service';
 import { ValidateTicketDto } from './dto/validate-ticket.dto';
 import {
   TicketDisplayResponse,
+  ValidatedTicketResponse,
   ValidateTicketResponse,
 } from './dto/ticket-display.dto';
 
@@ -43,6 +46,28 @@ export class TicketsController {
     @CurrentUser() user: AuthenticatedUserRole,
   ): Promise<TicketDisplayResponse[]> {
     return this.ticketsService.findAllForCustomer(user.id);
+  }
+
+  // D56: histórico de ingressos validados pela portaria, filtrado por sessão
+  // (query obrigatória — mesmo padrão de 400 sem parâmetro já usado em
+  // GET /reservations/mine/active, D54). Precisa vir ANTES de `:id`, mesmo
+  // motivo de `mine` acima: Nest resolve por ordem de declaração, e `:id`
+  // casaria com o literal "validated" como se fosse um id.
+  @Get('validated')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('GATE')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Histórico de ingressos validados (USED) de uma sessão, mais recente primeiro',
+  })
+  findValidated(
+    @Query('sessionId') sessionId: string | undefined,
+  ): Promise<ValidatedTicketResponse[]> {
+    if (!sessionId) {
+      throw new BadRequestException('sessionId é obrigatório');
+    }
+    return this.ticketsService.findValidatedForSession(sessionId);
   }
 
   // Consulta do ingresso pelo dono (D46: QR renderizado client-side a

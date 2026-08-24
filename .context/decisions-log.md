@@ -210,3 +210,14 @@ Achado do usuário após o primeiro deploy real: nenhuma tela tem forma explíci
 
 **D53 — D47 elevado de backlog para prioridade: listagem real de ingressos do cliente**
 O fallback de `localStorage` (Sprint 4) cobre só quem acabou de pagar, na mesma sessão de navegador — não serve como "visualizar meus ingressos" de verdade. Elevado a prioridade pelo usuário após o deploy real. Requer `GET /tickets/mine` novo no backend (ownership via `customerId`, mesmo padrão de `GET /tickets/:id`) antes da tela de listagem no frontend poder existir de verdade — contrato antes de consumo, mesma ordem de sempre.
+
+**D54 — Achado durante D52: estado de reserva `PENDING` perdido ao reabrir checkout, agora mais fácil de disparar por causa da navegação nova**
+`ReservationPanel` não reconcilia estado local com uma `Reservation PENDING` já existente no banco ao revisitar `/sessions/[id]` — o mapa mostra o assento corretamente como `PENDING`, mas o painel volta a "escolha um assento", sem countdown nem botão de pagamento, até a reserva expirar sozinha (5min, D05). Não é perda de dado (`Reservation` continua íntegra no banco) — é dessincronia de UI. Relevância elevada porque o link de "voltar pro home" que D52 acabou de adicionar no meio do checkout é justamente a ação que expõe esse cenário, que antes exigia navegação mais deliberada (ex: fechar aba, editar URL manualmente) pra acontecer. **Resolvido**: `GET /reservations/mine/active?sessionId=X` (isolamento garantido no `WHERE` da query, sweep lazy reaproveitado) + reidratação de estado no frontend, validado reproduzindo o bug antes de corrigir.
+
+## Ciclo 10 — Achados pós-release, papel GATE (24/08)
+
+**D55 — Falha em D52: nenhum caminho de navegação até `/check-in`, só URL direta**
+D52 assumiu "portaria não precisa de ação extra" sem verificar se existia algum link até a própria tela de trabalho do papel GATE — não existia nenhum. Não é escopo novo, é completar a cobertura que D52 já deveria ter tido. Correção: adicionar o mesmo padrão de link de papel já usado para customer/organizador (`AuthStatus`), agora também para GATE.
+
+**D56 — Histórico de ingressos validados na portaria: feature nova, escopo mínimo aceito**
+Solicitado pelo usuário, condicionado a baixo custo de implementação. Rejeitada a opção mais óbvia (lista mantida só em memória do navegador durante a sessão de uso) por não sobreviver a reload/logout — contradiz a própria ideia de "histórico". Como a portaria já seleciona a sessão antes de validar (fluxo D46), a implementação correta de custo equivalente é backend filtrando `Ticket` com `status: USED` por `sessionId`, reaproveitando o mesmo padrão de query já usado em `GET /tickets/mine` (D53) — persistente de verdade, sem necessidade de rastrear "qual operador de portaria validou" (não solicitado).
