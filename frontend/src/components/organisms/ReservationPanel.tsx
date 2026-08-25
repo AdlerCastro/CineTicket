@@ -103,11 +103,19 @@ export function ReservationPanel({
         return;
       }
       if (err instanceof ApiError && err.status === 403) {
-        // D44: 403 agora tem duas causas distintas — sessão não-publicada
-        // (regra de negócio, usuário já está autenticado corretamente) vs.
-        // guard de role/token (motivo real de sessão inválida). Redirecionar
-        // pro login no primeiro caso seria enganoso: a pessoa já está logada,
-        // o assento é que não pode ser reservado.
+        // D44/achado pós-D58: 403 tem duas causas reais, nenhuma delas
+        // "sessão inválida" — token expirado/inválido já é 401 (AuthGuard('jwt')
+        // do Passport), nunca 403. As duas causas de 403 aqui são: sessão
+        // não-publicada (ForbiddenException com mensagem própria, ver
+        // reservations.service.ts) e RolesGuard recusando por papel
+        // (@Roles('CUSTOMER') em POST /reservations — organizador/portaria
+        // recebem a mensagem padrão do Nest quando um guard retorna `false`
+        // sem lançar exceção própria: "Forbidden resource", ver role.guard.ts).
+        // Redirecionar pro login em qualquer um dos dois é enganoso: a pessoa
+        // já está autenticada corretamente, só não pode fazer aquela ação
+        // específica — e causava flash de /login (que se auto-redireciona de
+        // volta por já estar autenticado) com perda silenciosa da seleção de
+        // assento no remount.
         const message = extractApiErrorMessage(err.message);
         if (message?.toLowerCase().includes('não publicada')) {
           setError(
@@ -116,7 +124,7 @@ export function ReservationPanel({
           onClearSelection();
           return;
         }
-        loginRedirect();
+        setError('Apenas contas de cliente podem reservar assentos.');
         return;
       }
       if (err instanceof ApiError && err.status === 401) {

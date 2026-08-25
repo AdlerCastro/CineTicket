@@ -16,17 +16,13 @@ import {
   AuthenticateUserResponse,
 } from './dto/login.dto';
 import { RegisterUserRequest, RegisterUserResponse } from './dto/register.dto';
-import { AppConfigService } from '@/config/config.service';
 import { ZodValidationPipe } from '@/common/pipes/zod-validation.pipe';
 
 const REFRESH_TOKEN_COOKIE = 'refreshToken';
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly config: AppConfigService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
   async login(
@@ -86,11 +82,18 @@ export class AuthController {
     this.clearRefreshTokenCookie(res);
   }
 
+  // D59: SameSite=None é obrigatório pra cookie sobreviver em fetch/XHR
+  // cross-site (Vercel↔Railway, domínios diferentes) — SameSite=Lax só
+  // acompanha navegação top-level, nunca chamada de API. SameSite=None exige
+  // Secure sempre (spec do navegador rejeita o cookie inteiro sem isso), por
+  // isso não fica mais condicionado a nodeEnv === 'production': localhost é
+  // tratado como contexto seguro pelo navegador, então Secure=true não quebra
+  // dev local mesmo servindo em http.
   private setRefreshTokenCookie(res: Response, refreshToken: string): void {
     res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, {
       httpOnly: true,
-      secure: this.config.nodeEnv === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
   }
@@ -98,8 +101,8 @@ export class AuthController {
   private clearRefreshTokenCookie(res: Response): void {
     res.clearCookie(REFRESH_TOKEN_COOKIE, {
       httpOnly: true,
-      secure: this.config.nodeEnv === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'none',
     });
   }
 
